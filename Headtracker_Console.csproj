@@ -43,6 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Calibration.cs" />
     <Compile Include="ExtensionMethods.cs" />
     <Compile Include="KalmanFilterFloat.cs" />
     <Compile Include="Program.cs" />

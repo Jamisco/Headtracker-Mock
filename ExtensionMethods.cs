@@ -25,11 +25,35 @@ namespace Headtracker_Console
             return new Point2f(Math.Abs(p.X), Math.Abs(p.Y));
         }
 
+        public static float Magnitude(this Point2f p)
+        {
+            return (float)Math.Sqrt(p.X * p.X + p.Y * p.Y);
+        }
+
         public static T Clamp<T>(this T val, T min, T max) where T : IComparable<T>
         {
             if (val.CompareTo(min) < 0) return min;
             else if (val.CompareTo(max) > 0) return max;
             else return val;
+        }
+
+        public static bool IsThesame(this Mat cur, Mat other)
+        {
+            // subtracts the two matrices and checks if the sum of the differences is zero
+
+            Mat diff = new Mat();
+
+            if (cur.Size() == other.Size() && cur.Type() == other.Type())
+            {
+                Cv2.Absdiff(cur, other, diff);
+
+                return Cv2.Sum(diff).Val0 == 0;
+
+            }
+
+            return false;
+
+
         }
     }
 }
