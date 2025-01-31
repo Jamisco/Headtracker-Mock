@@ -15,6 +15,32 @@ namespace Headtracker_Console
             return "(" + p.X + ", " + p.Y + ")";
         }
 
+        public static string R2P(this Point3d p)
+        {
+            Point3d b = new Point3d(Math.Round(p.X), Math.Round(p.Y), Math.Round(p.Z));
+
+            return "" + b.X + ", " + b.Y + ", " + b.Z;
+        }
+
+        public static double Clamp(this double value, double min, double max)
+        {
+            if (value < min)
+                return min;
+            if (value > max)
+                return max;
+            return value;
+        }
+
+        // Optional: Add float version if needed
+        public static float Clamp(this float value, float min, float max)
+        {
+            if (value < min)
+                return min;
+            if (value > max)
+                return max;
+            return value;
+        }
+
         public static Point R2P(this Point2f p)
         {
             return new Point(Math.Round(p.X), Math.Round(p.Y));

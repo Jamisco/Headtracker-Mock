@@ -11,7 +11,7 @@ namespace Headtracker_Console
             AppDomain.CurrentDomain.ProcessExit
                 += new EventHandler(CurrentDomain_ProcessExit);
 
-            Console.SetWindowSize(50, 50);
+            Console.SetWindowSize(50, 20);
             // do some work
 
             vidStream = new HeadTracker(0);

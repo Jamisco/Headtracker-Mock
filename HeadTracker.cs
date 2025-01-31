@@ -3,9 +3,11 @@ using OpenCvSharp;
 using ScottPlot.Colormaps;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
-using static Headtracker_Console.Calibration;
 
 
 public class HeadTracker
@@ -16,8 +18,8 @@ public class HeadTracker
     private Thread trackingThread;
     private Thread keyPressThread;
 
-    const int FRAMEHEIGHT = 800;
-    const int FRAMEWIDTH = 800;
+    public const int FRAMEWIDTH = 640;
+    public const int FRAMEHEIGHT = 480;
     public const int CaptureFps = 30;
     private bool isTracking;
 
@@ -28,8 +30,8 @@ public class HeadTracker
         // Initialize the camera
         capture = new VideoCapture(cameraIndex);
         capture.Set(VideoCaptureProperties.Fps, CaptureFps); // Adjust as needed
-        capture.FrameHeight = 800;
-        capture.FrameWidth = 800;
+        capture.FrameHeight = FRAMEHEIGHT;
+        capture.FrameWidth = FRAMEWIDTH;
         Console.WriteLine("Size: " + capture.FrameHeight + " - " + capture.FrameWidth);
     }
 
@@ -37,9 +39,163 @@ public class HeadTracker
     Point[][] curContours;
     public Triangle curTriangle { get; private set; }
     public Triangle centerTriangle { get; private set; }
-    public bool HasCenter { get; set; } = false;
 
-    Calibration calibration;
+    static Point2f[] tt1 = new Point2f[]
+{
+    new Point2f(459, 204),  // [0]
+    new Point2f(564, 340),  // [1]
+    new Point2f(352, 339)   // [2]
+};
+
+    static Point2f[] tt3 = new Point2f[]
+{
+    new Point2f(459, 204),  // Top point [0]
+    new Point2f(564, 340),  // Right point [1]
+    new Point2f(352, 339)   // Left point [2]
+};
+
+    public static Point2f[] tt4 = new Point2f[]
+    {
+    new Point2f(320, 240),     // Top
+    new Point2f(370, 340),     // Right
+    new Point2f(270, 340)      // Left
+    };
+
+    public static Point3f[] CreateScaledObjectPoints(Point2f[] imagePoints = null)
+    {
+        if(imagePoints == null)
+        {
+            imagePoints = tt4;
+        }
+
+        float scale = 0.001f;
+        float zDepth = -0.04f;
+
+        // Calculate image point distances
+        float rightSide = (float)Math.Sqrt(
+            Math.Pow(imagePoints[1].X - imagePoints[0].X, 2) +
+            Math.Pow(imagePoints[1].Y - imagePoints[0].Y, 2));
+
+        float leftSide = (float)Math.Sqrt(
+            Math.Pow(imagePoints[2].X - imagePoints[0].X, 2) +
+            Math.Pow(imagePoints[2].Y - imagePoints[0].Y, 2));
+
+        float baseWidth = imagePoints[1].X - imagePoints[2].X;
+
+        // Scale these distances to object space
+        float scaledBase = baseWidth * scale;
+        float halfBase = scaledBase / 2;
+
+        // Calculate height to maintain image proportions
+        float targetRatio = rightSide / baseWidth;  // should match leftSide/baseWidth
+        float scaledSide = scaledBase * targetRatio;
+        float height = (float)Math.Sqrt(scaledSide * scaledSide - halfBase * halfBase);
+
+        return new Point3f[]
+        {
+        new Point3f(0, -height, zDepth),    // Top
+        new Point3f(halfBase, 0, 0),        // Right
+        new Point3f(-halfBase, 0, 0)        // Left
+        };
+    }
+
+    static int centerX = FRAMEWIDTH / 2;
+    static int centerY = FRAMEHEIGHT / 2;
+
+    static Triangle testTr = new Triangle(PP(tt4, 60).ToList());
+
+    static float curAngle = 0;
+
+    static int dir = 1;
+    static void setTest()
+    {
+        testTr = new Triangle(RP(tt4, curAngle).ToList());
+
+        curAngle += 1f * dir;
+
+        int max = 90;
+
+        if ((dir == 1 && curAngle >= max) || (dir == -1 && curAngle <= -max))
+        {
+            dir *= -1;
+        }
+    }
+
+    public static Point2f[] RP(Point2f[] points, float rollAngle)
+    {
+        // Calculate center point
+        float centerX = (points[0].X + points[1].X + points[2].X) / 3;
+        float centerY = (points[0].Y + points[1].Y + points[2].Y) / 3;
+
+        // Convert angle to radians
+        double angleRad = rollAngle * Math.PI / 180;
+
+        // Rotate points around center
+        Point2f[] rotatedPoints = new Point2f[3];
+        for (int i = 0; i < 3; i++)
+        {
+            float dx = points[i].X - centerX;
+            float dy = points[i].Y - centerY;
+
+            rotatedPoints[i] = new Point2f(
+                centerX + (float)(dx * Math.Cos(angleRad) - dy * Math.Sin(angleRad)),
+                centerY + (float)(dx * Math.Sin(angleRad) + dy * Math.Cos(angleRad))
+            );
+        }
+
+        return rotatedPoints;
+    }
+
+    public static Point2f[] PP(Point2f[] points, float angleDegrees)
+    {
+        // Use bottom center as pivot point
+        float baseX = (points[1].X + points[2].X) / 2;  // bottom center X
+        float baseY = points[1].Y;  // bottom Y (since both bottom points have same Y)
+
+        double angleRad = angleDegrees * Math.PI / 180;
+        float scale = (float)Math.Cos(angleRad);
+
+        Point2f[] pitchedPoints = new Point2f[3];
+
+        // Keep bottom points fixed
+        pitchedPoints[1] = points[1];  // right
+        pitchedPoints[2] = points[2];  // left
+
+        // Calculate top point position
+        float height = baseY - points[0].Y;  // original height
+        float newHeight = height * scale;    // compressed height
+
+        // Move top point
+        pitchedPoints[0] = new Point2f(
+            points[0].X,
+            baseY - newHeight  // move up from base by new height
+        );
+
+        return pitchedPoints;
+    }
+
+    public static Point2f[] YP(Point2f[] points, float angleDegrees)
+    {
+        float centerX = (points[0].X + points[1].X + points[2].X) / 3;
+        float centerY = (points[0].Y + points[1].Y + points[2].Y) / 3;
+
+        double angleRad = -angleDegrees * Math.PI / 180;  // Negative to reverse direction
+        float scale = (float)Math.Cos(angleRad);  // Foreshortening effect
+
+        Point2f[] yawedPoints = new Point2f[3];
+        for (int i = 0; i < 3; i++)
+        {
+            float dx = points[i].X - centerX;
+            // X coordinates compress based on angle, direction reversed
+            yawedPoints[i] = new Point2f(
+                centerX + (dx * scale),
+                points[i].Y
+            );
+        }
+        return yawedPoints;
+    }
+
+    public bool HasCenter { get; set; } = false;
     public void StartTracking()
     {
         Console.WriteLine("Press a key to Begin...");
@@ -49,7 +205,6 @@ public class HeadTracker
         isTracking = true;
         trackingThread = new Thread(TrackingLoop);
         keyPressThread = new Thread(ReadKey);
-        calibration = new Calibration(this);
 
         trackingThread.Start();
         keyPressThread.Start();
@@ -69,86 +224,17 @@ public class HeadTracker
                 {
                     HasCenter = true;
                     centerTriangle = curTriangle;
-                    calibration.UpdateCenter();
+                    HeadPose.SetOffset(centerTriangle);
+                    PoseTransformation.SetOffset(centerTriangle);
+
                     Console.WriteLine("New Center Set");
                 }
-
-                if (k.Key == ConsoleKey.X)
+                else if (k.Key == ConsoleKey.C)
                 {
-                    if(!HasCenter)
-                    {
-                        Console.WriteLine("Set Center Before Calibration");
-                    }
-                    else
-                    {
-                        calibration.IsCalibrating = !calibration.IsCalibrating;
+                    Console.WriteLine("Prediction Cleared");
 
-                        if(calibration.IsCalibrating)
-                        {
-                            Console.WriteLine("Started Calibration");
-                        }
-                        else
-                        {
-                            Console.WriteLine("Stopped Calibration");
-                            calibration.CalibrateOffsets();
-                        }
-                    }
-                }
-
-                if (k.Key == ConsoleKey.Q && calibration.IsCalibrating)
-                {
-                    calibration.CalibratePitch = !calibration.CalibratePitch;
-                    
-                    if(calibration.CalibratePitch)
-                    {
-                        Console.WriteLine("Started Pitch Calibration");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Stopped Pitch Calibration");
-                    }
-                }
-
-                if (k.Key == ConsoleKey.W && calibration.IsCalibrating)
-                {
-                    calibration.CalibrateYaw = !calibration.CalibrateYaw;
-
-                    if (calibration.CalibrateYaw )
-                    {
-                        Console.WriteLine("Started Yaw Calibration");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Stopped Yaw Calibration");
-                    }
-                }
-
-                if (k.Key == ConsoleKey.E && calibration.IsCalibrating)
-                {
-                    calibration.CalibrateRoll = !calibration.CalibrateRoll;
-
-                    if (calibration.CalibrateRoll)
-                    {
-                        Console.WriteLine("Started Roll Calibration");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Stopped Roll Calibration");
-                    }
-                }
-
-
-
-                if (k.Key == ConsoleKey.C && calibration.IsCalibrating)
-                {
-                    calibration.ClearCurrentPoints();
-                    Console.WriteLine("Calibration Cleared");
-                }
-
-                if (k.Key == ConsoleKey.S)
-                {
-                    calibration.Serialize();
-                    Console.WriteLine("Calibration Saved");
+                    PoseTransformation.ClearPredictions();
+                    HeadPose.ClearPredictions();
                 }
             }
         }
@@ -156,7 +242,7 @@ public class HeadTracker
 
     Mat displayFrame;
 
-    string frameName = "Tracking Frame";
+    string frameName = "Tracking Frame1";
 
     private void TrackingLoop()
     {
@@ -166,39 +252,26 @@ public class HeadTracker
         {
             capture.Read(frame);
 
-            if (frame.Empty() || frame.IsThesame(prevFrame))
-            {
-                continue;
-            }
+            //if (frame.Empty() || frame.IsThesame(prevFrame))
+            //{
+            //    continue;
+            //}
 
             ExtractCurrentTriangle(frame);
 
             displayFrame = frame.EmptyClone();
 
-            if(!calibration.IsCalibrating)
+            if(HasCenter)
             {
-                if(!curTriangle.IsValid)
-                {
-                    goto Skip;
-                }
-
-                ShowCenterTriangle(displayFrame);
-                ShowCurrentTriangle(displayFrame);
-                ShowCalculatedTriangle(displayFrame);
-                ShowFrameCounter(displayFrame);
-            }
-            else
-            {
-                centerTriangle.DrawGraph(displayFrame);
-                curTriangle.DrawCentriod(displayFrame);
-
-                calibration.AddCalibrationPoint(ref displayFrame);
+                ShowCenterTriangle(displayFrame);              
             }
 
-            Skip:
+            ShowCurrentTriangle(displayFrame);
+            ShowHeadPose(displayFrame);
+            ShowFrameCounter(displayFrame);
 
             Cv2.NamedWindow(frameName);
-            Cv2.SetWindowProperty(frameName, WindowPropertyFlags.Fullscreen, 5);
+            Cv2.SetWindowProperty(frameName, WindowPropertyFlags.AspectRatio, 5);
             Cv2.ImShow(frameName, displayFrame);
             Cv2.WaitKey(1);
 
@@ -209,10 +282,19 @@ public class HeadTracker
 
     Point2f start = new Point2f(10, 20);
     Point2f offset = new Point2f(0, 150);
+
     private void ExtractCurrentTriangle(Mat frame)
     {
         try
         {
+            if(TEST)
+            {
+                setTest();
+                curTriangle = testTr;
+
+                return;
+            }
+
             Mat grayFrame = new Mat();
 
             Cv2.CvtColor(frame, grayFrame, ColorConversionCodes.BGR2GRAY);
@@ -231,12 +313,16 @@ public class HeadTracker
             Triangle temp;
             GetTrianglePoints(curContours, out temp);
 
-            curTriangle = temp;
+            if(temp.IsValid)
+            {
+                //Cv2.ImShow("Filtered Frame", grayFrame);
+                curTriangle = temp;
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
 
-            curTriangle = new Triangle();
+            
         }
 
     }
@@ -263,7 +349,6 @@ public class HeadTracker
             centerTriangle.DrawTriangle(displayFrame, Scalar.White, true);
         }
     }
-
     private void ShowFrameCounter(Mat displayFrame)
     {
         Point bottom = new Point(0, 580);
@@ -271,29 +356,66 @@ public class HeadTracker
         Cv2.PutText(displayFrame, "Frame Count: " + frameCount, bottom, HersheyFonts.HersheyPlain, 1, Scalar.White);
     }
 
-    private void ShowCalculatedTriangle(Mat displayFrame)
+    double bf = 0;
+    int maxD = -1;
+
+    public const bool TEST = false;
+    private void ShowHeadPose(Mat displayFrame)
     {
-        if (calibration.FullyCalibrated)
+        Point3d r, t;
+
+        Point start = new Point(0, 300);
+        Point step = new Point(0, 20);
+        int c = 0;
+
+        HeadPose.GetHeadPose(curTriangle, out r, out t);
+        PoseTransformation.EstimateTransformation(curTriangle.Points, out Point3d r2, out Point3d t2);
+
+        //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
+        //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+        //Cv2.PutText(displayFrame, "Translation: " + t.R2P(), 
+        //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+        c += 2;
+
+        Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(),
+            start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+        Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
+            start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+        Cv2.PutText(displayFrame, "Current Angle: " + curAngle,
+    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+        if(HasCenter)
         {
-            //calibration.GetTransformation(centerTriangle, curTriangle, out Triangle t2, out float yaw, out float pitch);
+            SendData(r2);
 
-            calibration.GetTransformation2(centerTriangle, curTriangle, out Triangle t2);
-
-            t2.DrawTriangle(displayFrame, Scalar.Green, true);
-            t2.PrintData(displayFrame, start + offset);
         }
-    }
 
-    private void ShowTestedTriangle(Mat displayFrame)
-    {
-        if (calibration.FullyCalibrated && HasCenter)
+        double r3 = Math.Round(PoseTransformation.focalLen, 3);
+
+        // if all rotation points are no greater than 5 degrees, break
+
+        int len = (int)(Math.Abs(r2.X) + Math.Abs(r2.Y) + Math.Abs(r2.Z));
+
+        if (len != 0)
         {
-            calibration.TestAngle(centerTriangle, out Triangle t2);
+            if (maxD == -1)
+            {
+                maxD = len;
+                bf = r3;
+            }
 
-            t2.DrawTriangle(displayFrame, Scalar.Blue, true);
+            if (len < maxD)
+            {
+                maxD = len;
+                bf = r3;
+            }
         }
-    }
 
+    }
     public void GetLedContours(ref Point[][] contours)
     {
         if (contours.Length < 2)
@@ -333,8 +455,27 @@ public class HeadTracker
 
         for (int i = 0; i < 3; i++)
         {
-            Moments moments = Cv2.Moments(contours[i]);
-            triPoint2fs.Add(new Point2f((int)(moments.M10 / moments.M00), (int)(moments.M01 / moments.M00)));
+            double area = Cv2.ContourArea(contours[i]);
+
+            // there might be a situation where the light so dim such that the area is 0, even tho the light has been seen, in such a case, we will just use the position of the first contour because if the area is zero, that means whatever contours were found all have thesame position.
+            if(area == 0)
+            {
+                if (contours[i].Length > 0)
+                {
+                    triPoint2fs.Add(contours[i][0]);
+                }
+                else
+                {
+                    // just add an empty invalid triangle, 
+                    // the preceding code should account for this
+                    triPoint2fs.Add(new Point2f());
+                }
+            }
+            else
+            {
+                Moments moments = Cv2.Moments(contours[i]);
+                triPoint2fs.Add(new Point2f((int)(moments.M10 / moments.M00), (int)(moments.M01 / moments.M00)));
+            }
         }
 
         triPoint2fs.Sort((a, b) => a.Y.CompareTo(b.Y));
@@ -348,75 +489,33 @@ public class HeadTracker
 
         triangle = new Triangle(triPoint2fs);
     }
-    public enum Axis { XAxis, YAxis, ZAxis };
 
-    [Serializable]
-    public struct TriangleDiff
+    private static UdpClient udpClient;
+    private static readonly string localhost = "127.0.0.1";
+    private static readonly int port = 9876;
+
+    public static void SendData(Point3d r)
     {
-        public Point2f centriodDiff;
-        public Point2f[] vectorDiff;
-        public TriangleDiff(Triangle t1, Triangle t2)
+        string pitch = r.X.ToString("F2");
+        r.Y = r.Y * -1;
+        string yaw = r.Y.ToString("F2");
+        string roll = r.Z.ToString("F2");
+
+        if(udpClient == null)
         {
-            Point2f[] cv = new Point2f[3];
-
-            centriodDiff = (t2.Centroid - t1.Centroid);
-
-            Point2f[] v1 = t1.Vectors;
-            Point2f[] v2 = t2.Vectors;
-
-            for (int i = 0; i < 3; i++)
-            {
-                cv[i] = v2[i] - v1[i];
-            }
-
-            vectorDiff = cv;
+            udpClient = new UdpClient();
         }
 
-        public static TriangleDiff operator +(TriangleDiff t1, TriangleDiff t2)
+        try
         {
-            Point2f[] vectorDiffs = new Point2f[3];
-            Point2f centriodDiff = new Point2f();
-
-            for (int i = 0; i < 3; i++)
-            {
-                vectorDiffs[i] = t1.vectorDiff[i] + t2.vectorDiff[i];
-            }
-
-            centriodDiff = t1.centriodDiff + t2.centriodDiff;
-
-            return new TriangleDiff()
-            {
-                vectorDiff = vectorDiffs,
-                centriodDiff = centriodDiff,
-
-            };
+            // Format: "pitch,yaw,roll,tx,ty,tz"
+            string data = $"{pitch},{yaw},{roll}";
+            byte[] bytes = Encoding.UTF8.GetBytes(data);
+            udpClient.Send(bytes, bytes.Length, localhost, port);
         }
-        public static TriangleDiff operator -(TriangleDiff t1, TriangleDiff t2)
+        catch (Exception e)
         {
-            return t1 + (t2 * -1);
-        }
-        public static TriangleDiff operator *(TriangleDiff t1, float num)
-        {
-            Point2f[] vectorDiffs = new Point2f[3];
-            Point2f centriodDiff = new Point2f();
-
-            for (int i = 0; i < 3; i++)
-            {
-                vectorDiffs[i] = t1.vectorDiff[i] * num;
-            }
-
-            centriodDiff = t1.centriodDiff * num;
-
-            return new TriangleDiff()
-            {
-                centriodDiff = centriodDiff,
-                vectorDiff = vectorDiffs,
-            };
-
-        }
-        public static TriangleDiff operator /(TriangleDiff t1, float div)
-        {
-            return t1 * (1 / div);
+            Console.WriteLine($"UDP Send Error: {e.Message}");
         }
     }
 
@@ -507,25 +606,39 @@ public class HeadTracker
         {
             return (float)Math.Sqrt(Math.Pow(p1.X - p2.X, 2) + Math.Pow(p1.Y - p2.Y, 2));
         }
+        public Mat PointsMatrix
+        {
+            get
+            {
+                Mat m = new Mat(3, 2, MatType.CV_32FC1);
 
-        //public Mat PointsMatrix
-        //{
-        //    get
-        //    {
-        //        Mat m = new Mat(3, 2, MatType.CV_32FC1);
+                m.SetArray(new float[]
+                {
+                    top.X, top.Y,
+                    left.X, left.Y,
+                    right.X, right.Y,
+                });
 
-        //        m.Set<float>(0, 0, top.X);
-        //        m.Set<float>(0, 1, top.Y);
+                return m;
+            }
+        }
 
-        //        m.Set<float>(1, 0, right.X);
-        //        m.Set<float>(1, 1, right.Y);
+        public Mat PointsMatrix3
+        {
+            get
+            {
+                Mat m = new Mat(3, 3, MatType.CV_32FC1);
 
-        //        m.Set<float>(2, 0, left.X);
-        //        m.Set<float>(2, 1, left.Y);
+                m.SetArray(new float[]
+                {
+                    top.X, top.Y, 0f,
+                    right.X, right.Y, 0f,
+                    left.X, left.Y, 0f
+                });
 
-        //        return m;
-        //    }
-        //}
+                return m;
+            }
+        }
 
         public float Perimeter
         {
@@ -860,24 +973,6 @@ public class HeadTracker
             return nt;
         }
 
-        public static Triangle operator +(Triangle t1, TriangleDiff t2)
-        {
-            Point2f[] vectorDiffs = new Point2f[3];
-            Point2f leftPoint = t1.left;
-
-            for (int i = 0; i < 3; i++)
-            {
-                vectorDiffs[i] = t1.Vectors[i] + t2.vectorDiff[i];
-            }
-
-            Point2f center = t1.Centroid + t2.centriodDiff;
-
-            Triangle nt = FromVectors(vectorDiffs, leftPoint);
-
-            nt.TranslateTo(center);
-
-            return nt;
-        }
         public static Triangle operator *(Triangle t1, float t2)
         {
             Point2f[] vectorDiffs = new Point2f[3];
@@ -895,7 +990,6 @@ public class HeadTracker
 
             return nt;
         }
-
         public static Triangle Square(Triangle t1)
         {
             Point2f[] vectorDiffs = new Point2f[3];
@@ -938,10 +1032,6 @@ public class HeadTracker
             return nt;
         }
 
-        public static Triangle operator -(Triangle t1, TriangleDiff t2)
-        {
-            return t1 + (t2 * -1);
-        }
     }
     static Point2f MidPoint2f(Point2f p1, Point2f p2)
     {
