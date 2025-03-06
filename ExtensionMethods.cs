@@ -15,6 +15,11 @@ namespace Headtracker_Console
             return "(" + p.X + ", " + p.Y + ")";
         }
 
+        /// <summary>
+        /// Radians to Degrees
+        /// </summary>
+        /// <param name="p"></param>
+        /// <returns></returns>
         public static string R2P(this Point3d p)
         {
             Point3d b = new Point3d(Math.Round(p.X), Math.Round(p.Y), Math.Round(p.Z));
@@ -22,23 +27,14 @@ namespace Headtracker_Console
             return "" + b.X + ", " + b.Y + ", " + b.Z;
         }
 
-        public static double Clamp(this double value, double min, double max)
+        public static float RTD(float radians)
         {
-            if (value < min)
-                return min;
-            if (value > max)
-                return max;
-            return value;
+            return (float)(radians * 180 / Math.PI);
         }
 
-        // Optional: Add float version if needed
-        public static float Clamp(this float value, float min, float max)
+        public static double RTD(double radians)
         {
-            if (value < min)
-                return min;
-            if (value > max)
-                return max;
-            return value;
+            return (double)(radians * 180 / Math.PI);
         }
 
         public static Point R2P(this Point2f p)
@@ -78,8 +74,11 @@ namespace Headtracker_Console
             }
 
             return false;
-
-
         }
+        public static Point2f MidPoint2f(Point2f p1, Point2f p2)
+        {
+            return new Point2f((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2);
+        }
+
     }
 }
