@@ -152,6 +152,10 @@ namespace Headtracker_Console
             Cv2.PutText(frame, "Base Vector: " + baseVector.ToString2(), pos.R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
             Cv2.PutText(frame, "Height Vector: " + heightVector.ToString2(), (pos + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            float ratio = heightVector.Magnitude() / baseVector.Magnitude();
+
+            Cv2.PutText(frame, "Base Height Ratio: " + ratio.ToString(), (pos + py.Multiply(5)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
         }
 
         public void ShowCurrentShape(Mat displayFrame)

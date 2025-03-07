@@ -20,7 +20,6 @@ namespace Headtracker_Console
         public static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64F);
         public static Mat distCoeffs = Mat.Zeros(1, 5, MatType.CV_64FC1);
 
-        public static List<Point3f> objectPoints = new List<Point3f>();
         static CameraProperties()
         {
             LoadCalibrationData();
@@ -28,12 +27,19 @@ namespace Headtracker_Console
             ResetPrediction();
         }
 
-        static int[] depthPoints = { 0, -4, -4, 0 };
+        static int[] depthPoints = { 0, 0, 0, 0 };
+
+        public static Point3f[] objectPoints = new Point3f[] 
+        {
+                new Point3f(5, -3, 0),   // P2 left
+                new Point3f(7, 0, 0),       // P1 top
+                new Point3f(10, -3, 0)     // P3 right
+        };
 
         public static void SetObjectPointsFromCenter(Point2f[] points)
         {
+            return;
             // scale distances between each point to one
-
             Point3f[] newPoints = new Point3f[points.Length];
             float smallNum = 0;
 
@@ -49,19 +55,19 @@ namespace Headtracker_Console
                 }
             }
 
-            if(smallNum > 0)
-            {
-                // divide all points by the smallest number
-                smallNum = smallNum / 2;
+            //if (smallNum > 0)
+            //{
+            //    // divide all points by the smallest number
+            //    smallNum = smallNum / 2;
 
-                for (int i = 0; i < newPoints.Length; i++)
-                {
-                    newPoints[i] = newPoints[i].Multiply(1 / smallNum);
-                    newPoints[i].Z = depthPoints[i];
-                }
-            }
+            //    for (int i = 0; i < newPoints.Length; i++)
+            //    {
+            //        newPoints[i] = newPoints[i].Multiply(1 / smallNum);
+            //        newPoints[i].Z = depthPoints[i];
+            //    }
+            //}
 
-            objectPoints = newPoints.ToList();
+            objectPoints = newPoints.ToArray();
         }
 
         public static void LoadCalibrationData()

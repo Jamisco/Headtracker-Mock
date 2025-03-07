@@ -88,9 +88,18 @@ namespace Headtracker_Console
                     out Point3d r,               // Rotation angles
                     out Point3d t)               // Translation vector
         {
-
+           // CameraProperties.SetObjectPointsFromCenter(centerPoints);
             Point3f[] objPoints = CameraProperties.objectPoints.ToArray();
-            PosePredictor.PredictPose(curPoints, centerPoints, out rvecGuess, tvecGuess);
+
+            int num = 10;
+            for (int i = 0; i < objPoints.Length; i++)
+            {
+                Point3f p = objPoints[i];
+
+                objPoints[i] = p.Multiply(1f / num);
+            }
+
+            SetPrediction(curPoints);
 
             // Convert arrays to InputArray
             using (InputArray objectPointsInput = InputArray.Create(objPoints))
@@ -177,6 +186,46 @@ namespace Headtracker_Console
         public static void SetCenter(Point2f[] points)
         {
             centerPoints = points;
+        }
+
+        public static void SetPrediction(Point2f[] points)
+        {
+            TShape shape = new TShape(points.ToList());
+
+            Point2f mid = MidPoint2f(points[0], points[2]);
+
+            Point2f baseVector = points[2] - points[0];
+            Point2f heightVector = points[1] - mid;
+
+            Point2f cmid = MidPoint2f(centerPoints[0], centerPoints[2]);
+
+            Point2f cbaseVector = centerPoints[2] - centerPoints[0];
+            Point2f cheightVector = centerPoints[1] - cmid;
+
+            float roll = baseVector.Y;
+            float pitch = ((heightVector.Y - cheightVector.Y) / cheightVector.Y) * 60;
+            float yaw = ((baseVector.X - cbaseVector.X) / cbaseVector.X) * 60;
+
+
+            if(pitch > 90)
+            {
+                pitch = ((cheightVector.Y - heightVector.Y) / cheightVector.Y) * 60;
+            }
+
+            if(yaw > 90)
+            {
+                yaw = ((cbaseVector.X - baseVector.X) / cbaseVector.X) * 60;
+            }
+
+            rvecGuess.Set<double>(0, 0, pitch);
+            rvecGuess.Set<double>(1, 0, yaw);
+            rvecGuess.Set<double>(2, 0, roll);
+
+            tvecGuess = new Mat(3, 1, MatType.CV_64FC1);
+
+            tvecGuess.Set<double>(0, 0, 1.0);  // Larger for translation
+            tvecGuess.Set<double>(1, 0, 1.0);
+            tvecGuess.Set<double>(2, 0, 1.0); // Larger Z translation
         }
 
         public static void ClearOffsets()

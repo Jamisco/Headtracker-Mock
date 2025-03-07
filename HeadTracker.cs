@@ -33,7 +33,7 @@ namespace Headtracker_Console
         private bool isTracking;
 
         public enum Transformations { Scale, Yaw, Roll, Pitch, X, Y, Z };
-
+        public enum Axis { X, Y };
         public HeadTracker(int cameraIndex = 0)
         {
             // Initialize the camera
@@ -52,90 +52,6 @@ namespace Headtracker_Console
         public Triangle centerTriangle { get; private set; }
         public Polygon centerPolygon { get; private set; }
         public TShape centerTShape { get; private set; }
-
-
-
-        static Point2f[] tt1 = new Point2f[]
-    {
-    new Point2f(459, 204),  // [0]
-    new Point2f(564, 340),  // [1]
-    new Point2f(352, 339)   // [2]
-    };
-
-        static Point2f[] tt3 = new Point2f[]
-    {
-    new Point2f(459, 204),  // Top point [0]
-    new Point2f(564, 340),  // Right point [1]
-    new Point2f(352, 339)   // Left point [2]
-    };
-
-        public static Point2f[] tt4 = new Point2f[]
-        {
-    new Point2f(320, 240),     // Top
-    new Point2f(370, 340),     // Right
-    new Point2f(270, 340)      // Left
-        };
-
-        public static Point3f[] CreateScaledObjectPoints(Point2f[] imagePoints = null)
-        {
-            if (imagePoints == null)
-            {
-                imagePoints = tt4;
-            }
-
-            float scale = 0.001f;
-            float zDepth = -0.04f;
-
-            // Calculate image point distances
-            float rightSide = (float)Math.Sqrt(
-                Math.Pow(imagePoints[1].X - imagePoints[0].X, 2) +
-                Math.Pow(imagePoints[1].Y - imagePoints[0].Y, 2));
-
-            float leftSide = (float)Math.Sqrt(
-                Math.Pow(imagePoints[2].X - imagePoints[0].X, 2) +
-                Math.Pow(imagePoints[2].Y - imagePoints[0].Y, 2));
-
-            float baseWidth = imagePoints[1].X - imagePoints[2].X;
-
-            // Scale these distances to object space
-            float scaledBase = baseWidth * scale;
-            float halfBase = scaledBase / 2;
-
-            // Calculate height to maintain image proportions
-            float targetRatio = rightSide / baseWidth;  // should match leftSide/baseWidth
-            float scaledSide = scaledBase * targetRatio;
-            float height = (float)Math.Sqrt(scaledSide * scaledSide - halfBase * halfBase);
-
-            return new Point3f[]
-            {
-        new Point3f(0, -height, zDepth),    // Top
-        new Point3f(halfBase, 0, 0),        // Right
-        new Point3f(-halfBase, 0, 0)        // Left
-            };
-        }
-
-        static int centerX = FRAMEWIDTH / 2;
-        static int centerY = FRAMEHEIGHT / 2;
-
-        static Triangle testTr = new Triangle(PP(tt4, 60).ToList());
-
-        static float curAngle = 0;
-
-        static int dir = 1;
-        static void setTest()
-        {
-            testTr = new Triangle(RP(tt4, curAngle).ToList());
-
-            curAngle += 1f * dir;
-
-            int max = 90;
-
-            if ((dir == 1 && curAngle >= max) || (dir == -1 && curAngle <= -max))
-            {
-                dir *= -1;
-            }
-        }
-
         public static Point2f[] RP(Point2f[] points, float rollAngle)
         {
             // Calculate center point
@@ -271,7 +187,7 @@ namespace Headtracker_Console
 
         Mat displayFrame;
 
-        string frameName = "Tracking Frame1";
+        string frameName = "Tracking Frame3";
         private void TrackingLoop()
         {
             Mat prevFrame = new Mat();
@@ -332,7 +248,7 @@ namespace Headtracker_Console
                 ShowFrameCounter(displayFrame);
 
                 Cv2.NamedWindow(frameName);
-                Cv2.SetWindowProperty(frameName, WindowPropertyFlags.AspectRatio, 5);
+                Cv2.SetWindowProperty(frameName, WindowPropertyFlags.Fullscreen, 5);
                 Cv2.ImShow(frameName, displayFrame);
                 Cv2.WaitKey(1);
 
@@ -590,32 +506,12 @@ namespace Headtracker_Console
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-                Cv2.PutText(displayFrame, "Current Angle: " + curAngle,
-            start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
-
                 if (HasCenter)
                 {
                     SendData(r2);
-                }
-
-                // if all rotation points are no greater than 5 degrees, break
-
-                int len = (int)(Math.Abs(r2.X) + Math.Abs(r2.Y) + Math.Abs(r2.Z));
-
-                if (len != 0)
-                {
-                    if (maxD == -1)
-                    {
-                        maxD = len;
-                    }
-
-                    if (len < maxD)
-                    {
-                        maxD = len;
-                    }
-                }
+                }   
             }
-            catch (Exception)
+            catch (Exception ex)
             {
 
                 return;
