@@ -94,9 +94,8 @@ namespace Headtracker_Console
             //ResetPrediction();
             Point3f[] objPoints = CameraProperties.objectPoints;
 
-            // what matters more than anything is the initial guess
-            // it has to be dead accurate
 
+            // used to scale the object values if need me
             float num = 1f;
             for (int i = 0; i < objPoints.Length; i++)
             {
@@ -105,6 +104,7 @@ namespace Headtracker_Console
                 objPoints[i] = p.Multiply(1f / num);
             }
 
+            // predict only the first frame
             if (frameAfterCenter == 0)
             {
                 SetPrediction(curPoints);
@@ -173,6 +173,14 @@ namespace Headtracker_Console
                     tvec.Get<double>(2, 0)
                 );
 
+                //if (frameAfterCenter == 0)
+                //{
+                //    rOffset = r;
+                //    tOffset = t;
+                //}
+
+                //r = r - rOffset;
+                //t = t - tOffset;
 
                 frameAfterCenter++;
             }
@@ -214,9 +222,9 @@ namespace Headtracker_Console
             float num = 300;
             //frameDiff = frameDiff.Multiply(num);
 
-            tvecGuess.Set<double>(0, 0, frameDiff.X);
-            tvecGuess.Set<double>(1, 0, frameDiff.Y);
-            tvecGuess.Set<double>(2, 0, z);
+            tvecGuess.Set<double>(0, 0, -5);
+            tvecGuess.Set<double>(1, 0, 3);
+            tvecGuess.Set<double>(2, 0, -41);
 
             Point2f vector = points[0] - points[2];
 
