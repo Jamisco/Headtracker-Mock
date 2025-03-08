@@ -86,6 +86,30 @@ namespace Headtracker_Console
         }
 
         static float scale = 1.0f;  // increment this: 1, 2, 5, 10, 20, etc.
+
+        static float tx = 2;
+        static float ty = 2;
+
+        public static void SetPrediction(Point2f[] points)
+        {
+            Point2f centriod = GetCentriod(points);
+
+            Point2f frameDiff = FRAMECENTER - centriod;
+
+            float num = 20;
+            frameDiff = frameDiff.Multiply(1 / num);
+
+            tvecGuess.Set<double>(0, 0, tx);
+            tvecGuess.Set<double>(1, 0, ty++);
+            tvecGuess.Set<double>(2, 0, 45);
+
+            Point2f vector = points[0] - points[2];
+
+            rvecGuess.Set<double>(0, 0, 0);
+            rvecGuess.Set<double>(1, 0, 0);
+            rvecGuess.Set<double>(2, 0, 0);
+        }
+
         public static void EstimateTransformation(
                     Point2f[] curPoints,   // Current 2D points
                     out Point3d r,               // Rotation angles
@@ -159,6 +183,8 @@ namespace Headtracker_Console
                 double roll = Math.Atan2(rotationMatrix.Get<double>(1, 0),
                                         rotationMatrix.Get<double>(0, 0));
 
+                ProjectPoints(rvec, tvec);
+
                 // Convert to degrees
                 r = new Point3d(
                     pitch * 180.0 / Math.PI,
@@ -185,23 +211,53 @@ namespace Headtracker_Console
                 frameAfterCenter++;
             }
         }
+        private static void ProjectPoints(Mat rvec, Mat tvec)
+        {
+            // Create correct size output array (same number of points as object points)
+            Point2f[] projectedPoints = new Point2f[CameraProperties.objectPoints.Length];
+
+            InputArray objectPointsInput = InputArray.Create(CameraProperties.objectPoints);
+
+            // Create output array as Mat instead of Point2f[]
+            Mat projectedPointsMat = new Mat(CameraProperties.objectPoints.Length, 1, MatType.CV_64FC2);
+            OutputArray projectedPointsOutput = OutputArray.Create(projectedPointsMat);
+
+            string rd = rvec.Dump();
+            string td = tvec.Dump();
+
+            Cv2.ProjectPoints(
+                objectPointsInput,
+                rvec,
+                tvec,
+                cameraMatrix,
+                distCoeffs,
+                projectedPointsOutput
+            );
+
+
+            // Convert Mat to Point2f array
+            Mat resultMat = projectedPointsOutput.GetMat();
+            string md = resultMat.Dump();
+
+            // For CV_32FC2, each row contains both x and y
+            for (int i = 0; i < resultMat.Rows; i++)
+            {
+                Vec2f point = resultMat.Get<Vec2f>(i, 0);
+                projectedPoints[i] = new Point2f(point[0], point[1]);
+            }
+
+            Mat frame = HeadTracker.CloneFrame.EmptyClone();
+
+            TShape shape = new TShape(projectedPoints.ToList());
+
+            shape.DrawShape(frame, Scalar.Green, true);
+
+            Cv2.ImShow("Projected Points", frame);
+            Cv2.WaitKey(1);
+
+        }
 
         #endregion
-
-        public static void EstimateTransformation2(
-                    Point2f[] curPoints,   // Current 2D points
-                    out Point3d r,               // Rotation angles
-                    out Point3d t)
-        {
-            r = new Point3d();
-            t = new Point3d();
-
-            // just hard code it back
-
-            // yaw is y axis of base vector
-            // use iterative method to find the best yaw /pitch
-            // we know which axis will be more depending on centriod diff
-        }
 
         static int frameAfterCenter = 0;
 
@@ -213,25 +269,7 @@ namespace Headtracker_Console
 
         static float z = 50;
 
-        public static void SetPrediction(Point2f[] points)
-        {
-            Point2f centriod = GetCentriod(points);
 
-            Point2f frameDiff = FRAMECENTER - centriod;
-
-            float num = 300;
-            //frameDiff = frameDiff.Multiply(num);
-
-            tvecGuess.Set<double>(0, 0, -5);
-            tvecGuess.Set<double>(1, 0, 3);
-            tvecGuess.Set<double>(2, 0, -41);
-
-            Point2f vector = points[0] - points[2];
-
-            rvecGuess.Set<double>(0, 0, 0);
-            rvecGuess.Set<double>(1, 0, 0);
-            rvecGuess.Set<double>(2, 0, 0);
-        }
 
         public static void ClearOffsets()
         {

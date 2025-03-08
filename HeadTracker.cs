@@ -187,6 +187,7 @@ namespace Headtracker_Console
         }
 
         Mat displayFrame;
+        public static Mat CloneFrame;
 
         string frameName = "Tracking Frame4";
         private void TrackingLoop()
@@ -205,6 +206,7 @@ namespace Headtracker_Console
                 var ledPoints = ExtractLedPoints(frame);
 
                 displayFrame = frame.EmptyClone();
+                CloneFrame = frame.EmptyClone();
 
                 switch (shape2Use)
                 {
@@ -520,6 +522,8 @@ namespace Headtracker_Console
                 return;
             }
         }
+
+
 
         private static UdpClient udpClient;
         private static readonly string localhost = "127.0.0.1";
