@@ -77,8 +77,16 @@ namespace Headtracker_Console
             points.Sort((a, b) => a.X.CompareTo(b.X));
 
             Point2f left = points[0];
-            Point2f top = points.Where(p => p.X != left.X).OrderBy(p => p.Y).First();
-            Point2f right = points.Where(p => p.X != left.X && p.Y != top.Y).First();
+            Point2f top = points[1];
+
+            if(top.Y > left.Y)
+            {
+                Point2f temp = top;
+                top = left;
+                left = temp;
+            }
+
+            Point2f right = points[2];
 
             Points = new Point2f[] { left, top, right };
         }
@@ -123,12 +131,31 @@ namespace Headtracker_Console
             // Draw lines in inverse T shape and shows their distances
 
             Point2f mid = MidPoint2f(Points[0], Points[2]);
+            Point2f mid2 = new Point2f(Points[1].X, mid.Y);
+
+            Point2f P0 = Points[0];    // Left base
+            Point2f P2 = Points[2];    // Right base
+            Point2f P1 = Points[1];    // Top point
+            // Vector math with Point2f
+            Point2f baseVector = P2 - P0;
+            Point2f topVector = P1 - P0;
+
+            // Projection formula
+            float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
+            float baseLengthSq = (baseVector.X * baseVector.X + baseVector.Y * baseVector.Y);
+            float t = dot / baseLengthSq;
+
+            // Intersection point
+            Point2f intersection = new Point2f(
+                P0.X + baseVector.X * t,
+                P0.Y + baseVector.Y * t
+            );
 
             Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, 1);
-            Cv2.Line(frame, Points[1].R2P(), mid.R2P(), sl, 1);
+            Cv2.Line(frame, Points[1].R2P(), intersection.R2P(), sl, 1);
 
-            string height = Point2f.Distance(Points[0], Points[2]).ToString("0.00");
-            string width = Point2f.Distance(Points[1], mid).ToString("0.00");   
+            string height = Point2f.Distance(Points[1], intersection).ToString("0.00");
+            string width = Point2f.Distance(Points[0], Points[2]).ToString("0.00");   
             Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
             Cv2.PutText(frame, height, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);

@@ -23,6 +23,7 @@ namespace Headtracker_Console
 
         public const int FRAMEWIDTH = 640;
         public const int FRAMEHEIGHT = 480;
+        public static Point2f FRAMECENTER = new Point2f(FRAMEWIDTH / 2, FRAMEHEIGHT / 2);
         public const int CaptureFps = 30;
         public const bool TEST = false;
 
@@ -187,7 +188,7 @@ namespace Headtracker_Console
 
         Mat displayFrame;
 
-        string frameName = "Tracking Frame3";
+        string frameName = "Tracking Frame4";
         private void TrackingLoop()
         {
             Mat prevFrame = new Mat();
@@ -242,13 +243,14 @@ namespace Headtracker_Console
                 if (HasCenter)
                 {
                     ShowCenterTriangle(displayFrame);
-                    ShowHeadPose(displayFrame);
                 }
+
+                ShowHeadPose(displayFrame);
 
                 ShowFrameCounter(displayFrame);
 
                 Cv2.NamedWindow(frameName);
-                Cv2.SetWindowProperty(frameName, WindowPropertyFlags.Fullscreen, 5);
+                Cv2.SetWindowProperty(frameName, WindowPropertyFlags.AspectRatio, 5);
                 Cv2.ImShow(frameName, displayFrame);
                 Cv2.WaitKey(1);
 
@@ -264,7 +266,6 @@ namespace Headtracker_Console
             try
             {
                 Point[][] curContours;
-
                 Mat grayFrame = new Mat();
 
                 Cv2.CvtColor(frame, grayFrame, ColorConversionCodes.BGR2GRAY);
@@ -274,7 +275,9 @@ namespace Headtracker_Console
                 // apply gausasain filter
                 Cv2.GaussianBlur(grayFrame, grayFrame, new Size(5, 5), 0);
 
-                Cv2.Threshold(grayFrame, grayFrame, 20, 255, ThresholdTypes.Binary);
+                Cv2.Threshold(grayFrame, grayFrame, 10, 255, ThresholdTypes.Binary);
+
+                //Cv2.ImShow("Gray Frame", grayFrame);
 
                 Cv2.FindContours(grayFrame, out curContours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
 

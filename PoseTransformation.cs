@@ -12,7 +12,6 @@ namespace Headtracker_Console
         static PoseTransformation()
         {
             LoadCalibrationData();
-            ResetPrediction();
         }
 
         #region Solve PnP related
@@ -29,15 +28,19 @@ namespace Headtracker_Console
 
         private static Point2f[] centerPoints;
 
+        static float depth = -100;
         public static void ResetPrediction()
         {
+
             rvecGuess.Set<double>(0, 0, 0);
             rvecGuess.Set<double>(1, 0, 0);
-            rvecGuess.Set<double>(2, 0, 0);
+            rvecGuess.Set<double>(2, 0, -8);
 
-            tvecGuess.Set<double>(0, 0, 1.0);  // Larger for translation
-            tvecGuess.Set<double>(1, 0, 1.0);
-            tvecGuess.Set<double>(2, 0, 1.0); // Larger Z translation
+            tvecGuess.Set<double>(0, 0, 0.1f);
+            tvecGuess.Set<double>(1, 0, 0.1f);
+            tvecGuess.Set<double>(2, 0, 10f);
+
+            //depth += .1f;
         }
 
         public static void LoadCalibrationData()
@@ -88,10 +91,13 @@ namespace Headtracker_Console
                     out Point3d r,               // Rotation angles
                     out Point3d t)               // Translation vector
         {
-           // CameraProperties.SetObjectPointsFromCenter(centerPoints);
-            Point3f[] objPoints = CameraProperties.objectPoints.ToArray();
+            //ResetPrediction();
+            Point3f[] objPoints = CameraProperties.objectPoints;
 
-            int num = 10;
+            // what matters more than anything is the initial guess
+            // it has to be dead accurate
+
+            float num = 1f;
             for (int i = 0; i < objPoints.Length; i++)
             {
                 Point3f p = objPoints[i];
@@ -99,7 +105,13 @@ namespace Headtracker_Console
                 objPoints[i] = p.Multiply(1f / num);
             }
 
-            SetPrediction(curPoints);
+            if (frameAfterCenter == 0)
+            {
+                SetPrediction(curPoints);
+            }
+
+            string rd = rvecGuess.Dump();
+            string td = tvecGuess.Dump();
 
             // Convert arrays to InputArray
             using (InputArray objectPointsInput = InputArray.Create(objPoints))
@@ -117,7 +129,7 @@ namespace Headtracker_Console
                     distCoeffsInput,
                     rvecOutput,
                     tvecOutput,
-                    false,  // useExtrinsicGuess = true
+                    true,  // useExtrinsicGuess = true
                     SolvePnPFlags.Iterative
                 );
 
@@ -161,8 +173,8 @@ namespace Headtracker_Console
                     tvec.Get<double>(2, 0)
                 );
 
-                //rvecInit = rvec;
-                //tvecInit = tvec;
+
+                frameAfterCenter++;
             }
         }
 
@@ -183,56 +195,39 @@ namespace Headtracker_Console
             // we know which axis will be more depending on centriod diff
         }
 
+        static int frameAfterCenter = 0;
+
         public static void SetCenter(Point2f[] points)
         {
             centerPoints = points;
+            ResetPrediction();
         }
+
+        static float z = 50;
 
         public static void SetPrediction(Point2f[] points)
         {
-            TShape shape = new TShape(points.ToList());
+            Point2f centriod = GetCentriod(points);
 
-            Point2f mid = MidPoint2f(points[0], points[2]);
+            Point2f frameDiff = FRAMECENTER - centriod;
 
-            Point2f baseVector = points[2] - points[0];
-            Point2f heightVector = points[1] - mid;
+            float num = 300;
+            //frameDiff = frameDiff.Multiply(num);
 
-            Point2f cmid = MidPoint2f(centerPoints[0], centerPoints[2]);
+            tvecGuess.Set<double>(0, 0, frameDiff.X);
+            tvecGuess.Set<double>(1, 0, frameDiff.Y);
+            tvecGuess.Set<double>(2, 0, z);
 
-            Point2f cbaseVector = centerPoints[2] - centerPoints[0];
-            Point2f cheightVector = centerPoints[1] - cmid;
+            Point2f vector = points[0] - points[2];
 
-            float roll = baseVector.Y;
-            float pitch = ((heightVector.Y - cheightVector.Y) / cheightVector.Y) * 60;
-            float yaw = ((baseVector.X - cbaseVector.X) / cbaseVector.X) * 60;
-
-
-            if(pitch > 90)
-            {
-                pitch = ((cheightVector.Y - heightVector.Y) / cheightVector.Y) * 60;
-            }
-
-            if(yaw > 90)
-            {
-                yaw = ((cbaseVector.X - baseVector.X) / cbaseVector.X) * 60;
-            }
-
-            rvecGuess.Set<double>(0, 0, pitch);
-            rvecGuess.Set<double>(1, 0, yaw);
-            rvecGuess.Set<double>(2, 0, roll);
-
-            tvecGuess = new Mat(3, 1, MatType.CV_64FC1);
-
-            tvecGuess.Set<double>(0, 0, 1.0);  // Larger for translation
-            tvecGuess.Set<double>(1, 0, 1.0);
-            tvecGuess.Set<double>(2, 0, 1.0); // Larger Z translation
+            rvecGuess.Set<double>(0, 0, 0);
+            rvecGuess.Set<double>(1, 0, 0);
+            rvecGuess.Set<double>(2, 0, 0);
         }
 
         public static void ClearOffsets()
         {
-            rOffset = new Point3d();
-            tOffset = new Point3d();
-            ResetPrediction();
+            frameAfterCenter = 0;
         }
     }
 }

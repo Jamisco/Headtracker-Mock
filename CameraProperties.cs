@@ -23,51 +23,31 @@ namespace Headtracker_Console
         static CameraProperties()
         {
             LoadCalibrationData();
-
-            ResetPrediction();
         }
 
         static int[] depthPoints = { 0, 0, 0, 0 };
 
         public static Point3f[] objectPoints = new Point3f[] 
         {
-                new Point3f(5, -3, 0),   // P2 left
-                new Point3f(7, 0, 0),       // P1 top
-                new Point3f(10, -3, 0)     // P3 right
+            new Point3f(-3.25f, 0, 0),     // Left
+            new Point3f(0, -3, 0),      // Top
+            new Point3f(3.25f, 0, 0)       // Right
         };
 
-        public static void SetObjectPointsFromCenter(Point2f[] points)
+        public static Point3f[] SetObjectPointsFromCenter(Point2f[] points)
         {
-            return;
             // scale distances between each point to one
             Point3f[] newPoints = new Point3f[points.Length];
-            float smallNum = 0;
 
             for (int i = 0; i < points.Length; i++)
             {
                 newPoints[i] = new Point3f(points[i].X - points[0].X, points[i].Y - points[0].Y, depthPoints[i]);
 
-                float num = Math.Max(newPoints[i].X, newPoints[i].Y);
-
-                if (num > smallNum && num > 0)
-                {
-                    smallNum = num;
-                }
+                newPoints[i].X = newPoints[i].X * -1;
+                newPoints[i].Y = newPoints[i].Y * 1;
             }
 
-            //if (smallNum > 0)
-            //{
-            //    // divide all points by the smallest number
-            //    smallNum = smallNum / 2;
-
-            //    for (int i = 0; i < newPoints.Length; i++)
-            //    {
-            //        newPoints[i] = newPoints[i].Multiply(1 / smallNum);
-            //        newPoints[i].Z = depthPoints[i];
-            //    }
-            //}
-
-            objectPoints = newPoints.ToArray();
+            return newPoints.ToArray();
         }
 
         public static void LoadCalibrationData()
@@ -111,17 +91,5 @@ namespace Headtracker_Console
             roi.Width = int.Parse(roiValues[2]);
             roi.Height = int.Parse(roiValues[3]);
         }
-        public static void ResetPrediction()
-        {
-
-            rvecInit.Set<double>(0, 0, 0.01);
-            rvecInit.Set<double>(1, 0, 0.01);
-            rvecInit.Set<double>(2, 0, 0.01);
-
-            tvecInit.Set<double>(0, 0, 1.0);  // Larger for translation
-            tvecInit.Set<double>(1, 0, 1.0);
-            tvecInit.Set<double>(2, 0, 10.0); // Larger Z translation
-        }
-
     }
 }

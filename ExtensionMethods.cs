@@ -80,5 +80,18 @@ namespace Headtracker_Console
             return new Point2f((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2);
         }
 
+        public static Point2f GetCentriod(Point2f[] points)
+        {
+            float x = 0;
+            float y = 0;
+
+            foreach (var point in points)
+            {
+                x += point.X;
+                y += point.Y;
+            }
+
+            return new Point2f(x / points.Length, y / points.Length);
+        }
     }
 }
