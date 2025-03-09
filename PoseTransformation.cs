@@ -1,4 +1,5 @@
 ﻿using OpenCvSharp;
+using Emgu;
 using System;
 using System.IO;
 using System.Linq;
@@ -23,8 +24,8 @@ namespace Headtracker_Console
         static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64F);
         static Mat distCoeffs = Mat.Zeros(1, 5, MatType.CV_64FC1);
 
-        static Point3d tOffset = new Point3d();
-        static Point3d rOffset = new Point3d();
+        public static Point3d tOffset = new Point3d();
+        public static Point3d rOffset = new Point3d();
 
         private static Point2f[] centerPoints;
 
@@ -88,7 +89,7 @@ namespace Headtracker_Console
         static float scale = 1.0f;  // increment this: 1, 2, 5, 10, 20, etc.
 
         static float tx = 2;
-        static float ty = 2;
+        static float ty = -5;
 
         public static void SetPrediction(Point2f[] points)
         {
@@ -96,19 +97,20 @@ namespace Headtracker_Console
 
             Point2f frameDiff = FRAMECENTER - centriod;
 
-            float num = 20;
+            float num = 5;
             frameDiff = frameDiff.Multiply(1 / num);
 
-            tvecGuess.Set<double>(0, 0, tx);
-            tvecGuess.Set<double>(1, 0, ty++);
-            tvecGuess.Set<double>(2, 0, 45);
-
-            Point2f vector = points[0] - points[2];
+            tvecGuess.Set<double>(0, 0, -2);
+            tvecGuess.Set<double>(1, 0, 5);
+            tvecGuess.Set<double>(2, 0, -40);
 
             rvecGuess.Set<double>(0, 0, 0);
             rvecGuess.Set<double>(1, 0, 0);
             rvecGuess.Set<double>(2, 0, 0);
+
         }
+
+
 
         public static void EstimateTransformation(
                     Point2f[] curPoints,   // Current 2D points
@@ -116,11 +118,11 @@ namespace Headtracker_Console
                     out Point3d t)               // Translation vector
         {
             //ResetPrediction();
-            Point3f[] objPoints = CameraProperties.objectPoints;
-
+            Point3f[] objPoints = CameraProperties.objectPoints.ToArray();
+            //Point3f[] objPoints = CameraProperties.SetObjectPointsFromCenter(curPoints);
 
             // used to scale the object values if need me
-            float num = 1f;
+            float num = 1f / 1f;
             for (int i = 0; i < objPoints.Length; i++)
             {
                 Point3f p = objPoints[i];
@@ -153,13 +155,16 @@ namespace Headtracker_Console
                     distCoeffsInput,
                     rvecOutput,
                     tvecOutput,
-                    true,  // useExtrinsicGuess = true
-                    SolvePnPFlags.Iterative
+                    useExtrinsicGuess: true,  // useExtrinsicGuess = true
+                    flags: SolvePnPFlags.Iterative
                 );
 
-                // Get the results
+                // Get the results  
                 Mat rvec = rvecOutput.GetMat();
                 Mat tvec = tvecOutput.GetMat();
+
+                string rd2 = rvec.Dump();
+                string td2 = tvec.Dump();
 
                 // Convert rotation vector to matrix
                 Mat rotationMatrix = new Mat();
@@ -199,11 +204,11 @@ namespace Headtracker_Console
                     tvec.Get<double>(2, 0)
                 );
 
-                //if (frameAfterCenter == 0)
-                //{
-                //    rOffset = r;
-                //    tOffset = t;
-                //}
+                if (frameAfterCenter == 0)
+                {
+                    rOffset = r;
+                    tOffset = t;
+                }
 
                 //r = r - rOffset;
                 //t = t - tOffset;
@@ -248,12 +253,70 @@ namespace Headtracker_Console
 
             Mat frame = HeadTracker.CloneFrame.EmptyClone();
 
-            TShape shape = new TShape(projectedPoints.ToList());
+            if(HeadTracker.Shape2Use == ShapeType.TShape)
+            {
+                TShape shape = new TShape(projectedPoints.ToList());
+                shape.DrawShape(frame, Scalar.Green, true);
 
-            shape.DrawShape(frame, Scalar.Green, true);
+            }
+            else
+            {
+                Polygon shape = new Polygon(projectedPoints.ToList());
+                shape.DrawShape(frame, Scalar.Green, true);
+
+            }
 
             Cv2.ImShow("Projected Points", frame);
             Cv2.WaitKey(1);
+
+        }
+
+        public static void EstimateTransformation2(Point2f[] curPoints, out Point3d r, out Point3d t)
+        {
+            Point2f centriod = GetCentriod(curPoints);
+
+            float angle = 100;
+
+            float yaw = (curPoints[1].X - centriod.X);
+            float pitch = 0;
+
+            Point2f P0 = curPoints[0];    // Left base
+            Point2f P1 = curPoints[1];    // Top point
+            Point2f P2 = curPoints[2];    // Right base
+            // Vector math with Point2f
+            Point2f baseVector = P2 - P0;
+            Point2f topVector = P1 - P0;
+
+            // Projection formula
+            float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
+            float baseLengthSq = (baseVector.X * baseVector.X + baseVector.Y * baseVector.Y);
+            float t1 = dot / baseLengthSq;
+
+            // Intersection point
+            Point2f intersection = new Point2f(
+                P0.X + baseVector.X * t1,
+                P0.Y + baseVector.Y * t1
+            );
+
+            float height = (float)Point2f.Distance(P1, intersection);
+            float width = (float)Point2f.Distance(P0, P2);
+
+            pitch = ((height / width) - .5f) * angle;
+
+            float roll = (curPoints[0] - curPoints[2]).Y;
+
+
+            // Convert to degrees
+            r = new Point3d(
+                pitch ,
+                -yaw ,
+                roll
+            );
+
+            // Translation
+            t = new Point3d(
+                0,0,0
+            );
 
         }
 

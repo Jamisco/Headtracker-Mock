@@ -1,5 +1,6 @@
 ﻿using OpenCvSharp;
 using System;
+using System.Linq;
 
 namespace Headtracker_Console
 {
@@ -92,6 +93,22 @@ namespace Headtracker_Console
             }
 
             return new Point2f(x / points.Length, y / points.Length);
+        }
+
+        public static Point3f GetCentriod(Point3f[] points)
+        {
+            float x = 0;
+            float y = 0;
+            float z = 0;
+
+            foreach (var point in points)
+            {
+                x += point.X;
+                y += point.Y;
+                z += point.Z;
+            }
+
+            return new Point3f(x / points.Length, y / points.Length, z / points.Length);
         }
     }
 }

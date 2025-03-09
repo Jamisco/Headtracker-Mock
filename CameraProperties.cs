@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Headtracker_Console.ExtensionMethods;
 
 namespace Headtracker_Console
 {
@@ -29,9 +30,9 @@ namespace Headtracker_Console
 
         public static Point3f[] objectPoints = new Point3f[] 
         {
-            new Point3f(-5, 0, 0),    // Left
-            new Point3f(0, 30, -3),    // Top
-            new Point3f(5, 0, 0)      // Right
+            new Point3f(-5f, 0, 0),    // Left
+            new Point3f(0, -4f, -3),    // Top
+            new Point3f(5f, 0, 0),      // Right
         };
 
         public static Point3f[] SetObjectPointsFromCenter(Point2f[] points)

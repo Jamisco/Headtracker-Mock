@@ -29,7 +29,7 @@ namespace Headtracker_Console
 
         public enum ShapeType { Triangle, Polygon, TShape };
 
-        const ShapeType shape2Use = ShapeType.TShape;
+        public const ShapeType Shape2Use = ShapeType.Polygon;
 
         private bool isTracking;
 
@@ -139,7 +139,7 @@ namespace Headtracker_Console
             trackingThread = new Thread(TrackingLoop);
             keyPressThread = new Thread(ReadKey);
 
-            switch (shape2Use)
+            switch (Shape2Use)
             {
                 case ShapeType.Triangle:
                     Console.WriteLine("Using Triangle Tracking");
@@ -208,7 +208,7 @@ namespace Headtracker_Console
                 displayFrame = frame.EmptyClone();
                 CloneFrame = frame.EmptyClone();
 
-                switch (shape2Use)
+                switch (Shape2Use)
                 {
                     case ShapeType.Triangle:
                         curTriangle = new Triangle(ledPoints);
@@ -377,7 +377,7 @@ namespace Headtracker_Console
 
             if (HasCenter)
             {
-                switch (shape2Use)
+                switch (Shape2Use)
                 {
                     case ShapeType.Triangle:
 
@@ -414,24 +414,21 @@ namespace Headtracker_Console
         }
         private void SetCenter()
         {
-            switch (shape2Use)
+            switch (Shape2Use)
             {
                 case ShapeType.Triangle:
 
                     centerTriangle = curTriangle;
-                    CameraProperties.SetObjectPointsFromCenter(centerTriangle.Points);
 
                     break;
                 case ShapeType.Polygon:
 
                     centerPolygon = curPolygon;
-                    CameraProperties.SetObjectPointsFromCenter(centerPolygon.Points);
 
                     break;
                 case ShapeType.TShape:
 
                     centerTShape = curTShape;
-                    CameraProperties.SetObjectPointsFromCenter(centerTShape.Points);
 
                     break;
                 default:
@@ -442,7 +439,7 @@ namespace Headtracker_Console
         }
         private void SetOffset()
         {
-            switch (shape2Use)
+            switch (Shape2Use)
             {
                 case ShapeType.Triangle:
 
@@ -476,7 +473,7 @@ namespace Headtracker_Console
 
             Point2f[] points;
 
-            switch (shape2Use)
+            switch (Shape2Use)
             {
                 case ShapeType.Triangle:
                     points = curTriangle.Points;
@@ -495,7 +492,9 @@ namespace Headtracker_Console
             try
             {
                 // check gpt, but if we computer pnp on both the center and the current points, we can get the difference between the two and use that to determine the angle of rotation
-                PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
+                //PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
+
+                PoseTransformation.EstimateTransformation2(points, out Point3d r2, out Point3d t2);
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
                 //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
@@ -511,10 +510,20 @@ namespace Headtracker_Console
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-                if (HasCenter)
-                {
-                    SendData(r2);
-                }   
+                c++;
+
+                Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(),
+            start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+                Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
+                    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+                SendData(r2);
+
+                //if (HasCenter)
+                //{
+                //    SendData(r2);
+                //}   
             }
             catch (Exception ex)
             {

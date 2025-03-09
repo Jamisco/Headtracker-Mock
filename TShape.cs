@@ -11,6 +11,22 @@ namespace Headtracker_Console
     {
 
         public Point2f[] Points;
+        public Point2f[] PointsWithCenter
+        {
+            get
+            {
+                List<Point2f> points = new List<Point2f>();
+
+                foreach (var point in Points)
+                {
+                    points.Add(point);
+                }
+
+                points.Add(Centroid);
+
+                return points.ToArray();
+            }
+        }
         public Point2f Centroid
         {
             get
