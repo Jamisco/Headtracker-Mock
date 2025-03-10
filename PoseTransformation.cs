@@ -301,14 +301,16 @@ namespace Headtracker_Console
             float height = (float)Point2f.Distance(P1, intersection);
             float width = (float)Point2f.Distance(P0, P2);
 
-            pitch = ((height / width) - .5f) * angle;
+            pitch = ((height / width) - .75f) * angle;
 
-            float roll = (curPoints[0] - curPoints[2]).Y;
+            float rAngle = .2f;
+            float roll = (curPoints[0] - curPoints[2]).Y * rAngle;
 
-
+            // for yaw figure out left/right deviation from center center
+            // for pitch figure out up//down deviation from center perdicular or center of shape
             // Convert to degrees
             r = new Point3d(
-                pitch ,
+                pitch,
                 -yaw ,
                 roll
             );
@@ -316,6 +318,41 @@ namespace Headtracker_Console
             // Translation
             t = new Point3d(
                 0,0,0
+            );
+
+        }
+
+        public static void EstimateTransformation2(TShape center, TShape cur, out Point3d r, out Point3d t)
+        {
+            float pitch, yaw, roll;
+
+            Point2f centerDiff = (cur.Centroid - cur.TopCentroid) - (center.Centroid - center.TopCentroid);
+
+            float angle = 2f;
+            float ra = .3f;
+
+            pitch = centerDiff.Y * angle;
+            yaw = centerDiff.X * angle;
+
+            roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
+
+            // for yaw figure out left/right deviation from center center
+            // for pitch figure out up//down deviation from center perdicular or center of shape
+            // we should be to introduce counter weights for each transformations,
+            // for example for every degree in roll reduce yaw by 2 degrees, or a percentage etc.
+            // this way we reduce the problem of drift.
+            // Now this might require some calibration, but we can offset this.
+
+            // we can also reproject back our estimated transformation back into the current shape, then use that to recalculate translation
+            r = new Point3d(
+                pitch,
+                yaw,
+                roll
+            );
+
+            // Translation
+            t = new Point3d(
+                0, 0, 0
             );
 
         }

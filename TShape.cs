@@ -11,22 +11,6 @@ namespace Headtracker_Console
     {
 
         public Point2f[] Points;
-        public Point2f[] PointsWithCenter
-        {
-            get
-            {
-                List<Point2f> points = new List<Point2f>();
-
-                foreach (var point in Points)
-                {
-                    points.Add(point);
-                }
-
-                points.Add(Centroid);
-
-                return points.ToArray();
-            }
-        }
         public Point2f Centroid
         {
             get
@@ -45,6 +29,64 @@ namespace Headtracker_Console
             }
         }
         // check if the points are within frame height and width
+
+        public Point2f TopBaseIntercept
+        {
+            get
+            {
+                Point2f P0 = Points[0];    // Left base
+                Point2f P2 = Points[2];    // Right base
+                Point2f P1 = Points[1];    // Top point
+                // Vector math with Point2f
+                Point2f baseVector = P2 - P0;
+                Point2f topVector = P1 - P0;
+
+                // Projection formula
+                float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
+                float baseLengthSq = (baseVector.X * baseVector.X + baseVector.Y * baseVector.Y);
+                float t = dot / baseLengthSq;
+
+                // Intersection point
+                Point2f intersection = new Point2f(
+                    P0.X + baseVector.X * t,
+                    P0.Y + baseVector.Y * t
+                );
+
+                return intersection;
+            }
+        }
+
+        public Point2f BaseCentroid
+        {
+            get
+            {
+                return MidPoint2f(Points[0], Points[2]);
+            }
+        }
+        public Point2f TopCentroid
+        {
+            get
+            {
+                return MidPoint2f(Points[1], TopBaseIntercept);
+            }
+        }
+
+        public float Height
+        {
+            get
+            {
+                return (float)Point2f.Distance(Points[1], TopBaseIntercept);
+            }
+        }
+
+        public float Width
+        {
+            get
+            {
+                return (float)Point2f.Distance(Points[0], Points[2]);
+            }
+        }
+
         public bool IsValid
         {
             get

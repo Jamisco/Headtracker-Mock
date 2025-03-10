@@ -29,7 +29,7 @@ namespace Headtracker_Console
 
         public enum ShapeType { Triangle, Polygon, TShape };
 
-        public const ShapeType Shape2Use = ShapeType.Polygon;
+        public const ShapeType Shape2Use = ShapeType.TShape;
 
         private bool isTracking;
 
@@ -494,7 +494,7 @@ namespace Headtracker_Console
                 // check gpt, but if we computer pnp on both the center and the current points, we can get the difference between the two and use that to determine the angle of rotation
                 //PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
 
-                PoseTransformation.EstimateTransformation2(points, out Point3d r2, out Point3d t2);
+                PoseTransformation.EstimateTransformation2(centerTShape, curTShape, out Point3d r2, out Point3d t2);
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
                 //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
