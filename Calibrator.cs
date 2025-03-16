@@ -54,6 +54,14 @@ namespace Headtracker_Console
 
         public enum CalibrateType { Pitch, Yaw, Roll };
 
+        public bool HasCalibration
+        {
+            get
+            {
+                return RollHolder.Negative.Last() != null;
+            }
+        }
+
         public bool CalibratingPitch { get; set; } = false;
         public bool CalibratingYaw { get; set; } = false;
         public bool CalibratingRoll { get; set; } = false;
@@ -89,6 +97,26 @@ namespace Headtracker_Console
             }
         }
 
+        public void GetUnitVector(out Point3f r, out Point3f t)
+        {
+            if (CalibratingPitch)
+            {
+                PitchHolder.GetUnitVector(out r, out t);
+            }
+            else if (CalibratingYaw)
+            {
+                YawHolder.GetUnitVector(out r, out t);
+            }
+            else if (CalibratingRoll)
+            {
+                RollHolder.GetUnitVector(out r, out t);
+            }
+            else
+            {
+                RollHolder.GetUnitVector(out r, out t);
+            }
+        }
+
         private ShapeHolder PitchHolder;
         private ShapeHolder YawHolder;
         private ShapeHolder RollHolder;
@@ -102,17 +130,19 @@ namespace Headtracker_Console
 
             if (CalibratingPitch)
             {
-               PitchHolder.AddShape(shape);
+                PitchHolder.AddShape(shape);
             }
-
-            if (CalibratingYaw)
+            else if (CalibratingYaw)
             {
                 YawHolder.AddShape(shape);
             }
-
-            if (CalibratingRoll)
+            else if (CalibratingRoll)
             {
                 RollHolder.AddShape(shape);
+            }
+            else
+            {
+               // Console.WriteLine("No Calibration Type Selected!");
             }
         }
 
@@ -193,6 +223,24 @@ namespace Headtracker_Console
                 {
                     Negative.Add(shape);
                 }
+            }
+
+            public void GetUnitVector(out Point3f r, out Point3f t)
+            {
+                Point2f centerT = CenterShape.TopCentroid;
+                TShape last = Negative.Last();
+
+                PoseTransformation.GetPureRotation(CenterShape, last,
+                    out Point3f r2);
+
+                Point2f tDiff = last.TopCentroid - centerT;
+
+                float biggestT = Math.Max(Math.Abs(tDiff.X), Math.Abs(tDiff.Y));
+
+                float roll = (float)r2.Z;
+
+                r = new Point3f(r2.X / roll, r2.Y / roll, r2.Z / roll);
+                t = new Point3f(tDiff.X / roll, tDiff.Y / roll, 0);
             }
         }
     }

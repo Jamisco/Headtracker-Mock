@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using static Headtracker_Console.ExtensionMethods;
 using static Headtracker_Console.HeadTracker;
+using Emgu.CV.CvEnum;
 
 namespace Headtracker_Console
 {
@@ -24,8 +25,8 @@ namespace Headtracker_Console
         static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64F);
         static Mat distCoeffs = Mat.Zeros(1, 5, MatType.CV_64FC1);
 
-        public static Point3d tOffset = new Point3d();
-        public static Point3d rOffset = new Point3d();
+        public static Point3f tOffset = new Point3f();
+        public static Point3f rOffset = new Point3f();
 
         private static Point2f[] centerPoints;
 
@@ -110,12 +111,10 @@ namespace Headtracker_Console
 
         }
 
-
-
         public static void EstimateTransformation(
-                    Point2f[] curPoints,   // Current 2D points
-                    out Point3d r,               // Rotation angles
-                    out Point3d t)               // Translation vector
+                Point2f[] curPoints,   // Current 2D points
+                out Point3f r,               // Rotation angles
+                out Point3f t)               // Translation vector
         {
             //ResetPrediction();
             Point3f[] objPoints = CameraProperties.objectPoints.ToArray();
@@ -191,17 +190,17 @@ namespace Headtracker_Console
                 ProjectPoints(rvec, tvec);
 
                 // Convert to degrees
-                r = new Point3d(
-                    pitch * 180.0 / Math.PI,
-                    yaw * 180.0 / Math.PI,
-                    roll * 180.0 / Math.PI
+                r = new Point3f(
+                    (float)(pitch * 180.0 / Math.PI),
+                    (float)(yaw * 180.0 / Math.PI),
+                    (float)(roll * 180.0 / Math.PI)
                 );
 
                 // Translation
-                t = new Point3d(
-                    tvec.Get<double>(0, 0),
-                    tvec.Get<double>(1, 0),
-                    tvec.Get<double>(2, 0)
+                t = new Point3f(
+                    (float)tvec.Get<double>(0, 0),
+                    (float)tvec.Get<double>(1, 0),
+                    (float)tvec.Get<double>(2, 0)
                 );
 
                 if (frameAfterCenter == 0)
@@ -253,7 +252,7 @@ namespace Headtracker_Console
 
             Mat frame = HeadTracker.CloneFrame.EmptyClone();
 
-            if(HeadTracker.Shape2Use == ShapeType.TShape)
+            if (HeadTracker.Shape2Use == ShapeType.TShape)
             {
                 TShape shape = new TShape(projectedPoints.ToList());
                 shape.DrawShape(frame, Scalar.Green, true);
@@ -271,79 +270,95 @@ namespace Headtracker_Console
 
         }
 
-        public static void EstimateTransformation2(Point2f[] curPoints, out Point3d r, out Point3d t)
+        public static void GetPureRotation(TShape center, TShape cur, out Point3f r)
         {
-            Point2f centriod = GetCentriod(curPoints);
+            float pitch, yaw, roll;
 
-            float angle = 100;
+            // the yaw angle can be derived by using the depth and get the max distance with the center can deviate from the center line. Said max distance is the max distance of the depth, or the depth from the base points to the back point
 
-            float yaw = (curPoints[1].X - centriod.X);
-            float pitch = 0;
+            // we can also use zoom to scale
 
-            Point2f P0 = curPoints[0];    // Left base
-            Point2f P1 = curPoints[1];    // Top point
-            Point2f P2 = curPoints[2];    // Right base
-            // Vector math with Point2f
-            Point2f baseVector = P2 - P0;
-            Point2f topVector = P1 - P0;
+            Point2f centerDiff = cur.CenterVector - center.CenterVector;
 
-            // Projection formula
-            float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
-            float baseLengthSq = (baseVector.X * baseVector.X + baseVector.Y * baseVector.Y);
-            float t1 = dot / baseLengthSq;
+            // instead of using this scales, values have to be normalize from 0 to 90
+            float angle = 2f;
+            float ra = .3f;
 
-            // Intersection point
-            Point2f intersection = new Point2f(
-                P0.X + baseVector.X * t1,
-                P0.Y + baseVector.Y * t1
-            );
+            //pitch = centerDiff.Y * angle;
+            //yaw = centerDiff.X * angle;
+            //roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
 
-            float height = (float)Point2f.Distance(P1, intersection);
-            float width = (float)Point2f.Distance(P0, P2);
+            // essetianly we treat the height vector as a center line, and then use atan2 to measure the angles
+            Point2f cp1 = center.HeightVector;
+            Point2f cp2 = cur.HeightVector;
 
-            pitch = ((height / width) - .75f) * angle;
+            // modify matrix to account for 00 top left system
 
-            float rAngle = .2f;
-            float roll = (curPoints[0] - curPoints[2]).Y * rAngle;
+            pitch = centerDiff.Y * angle;
 
-            // for yaw figure out left/right deviation from center center
-            // for pitch figure out up//down deviation from center perdicular or center of shape
-            // Convert to degrees
-            r = new Point3d(
-                pitch,
-                -yaw ,
-                roll
-            );
+            float hw = FRAMECENTER.X;
+            roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
+            yaw = cur.CenterVector.X - center.CenterVector.X;
+
+            r = new Point3f(
+                    pitch,
+                    yaw,
+                    roll
+                );
+        }
+
+        public static void EstimateTransformation3(Mat frame, TShape center, TShape cur, Point3f unitR, Point3f unitT, out Point3f r, out Point3f t)
+        {
+            GetPureRotation(center, cur, out r);
+
+            float expectedXT = center.TopCentroid.X + (r.Z * unitT.X);
+            float actualXT = cur.TopCentroid.X;
+
+            float x = expectedXT - actualXT;
 
             // Translation
-            t = new Point3d(
-                0,0,0
+            t = new Point3f(
+                x, 0, 0
             );
 
         }
 
-        public static void EstimateTransformation2(TShape center, TShape cur, out Point3d r, out Point3d t)
+        public static void EstimateTransformation2(Mat frame, TShape center, TShape cur, out Point3d r, out Point3d t)
         {
             float pitch, yaw, roll;
 
-            Point2f centerDiff = (cur.Centroid - cur.TopCentroid) - (center.Centroid - center.TopCentroid);
+            // the yaw angle can be derived by using the depth and get the max distance with the center can deviate from the center line. Said max distance is the max distance of the depth, or the depth from the base points to the back point
 
+            // we can also use zoom to scale
+
+            Point2f centerDiff = cur.CenterVector - center.CenterVector;
+
+            // instead of using this scales, values have to be normalize from 0 to 90
             float angle = 2f;
             float ra = .3f;
 
+            //pitch = centerDiff.Y * angle;
+            //yaw = centerDiff.X * angle;
+            //roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
+
+            // essetianly we treat the height vector as a center line, and then use atan2 to measure the angles
+            Point2f cp1 = center.HeightVector;
+            Point2f cp2 = cur.HeightVector;
+
+            // modify matrix to account for 00 top left system
+
             pitch = centerDiff.Y * angle;
-            yaw = centerDiff.X * angle;
 
-            roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
+            float hw = FRAMECENTER.X;
+            roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
+            yaw = cur.CenterVector.X - center.CenterVector.X;
+            // ---------------------
 
-            // for yaw figure out left/right deviation from center center
-            // for pitch figure out up//down deviation from center perdicular or center of shape
-            // we should be to introduce counter weights for each transformations,
-            // for example for every degree in roll reduce yaw by 2 degrees, or a percentage etc.
-            // this way we reduce the problem of drift.
-            // Now this might require some calibration, but we can offset this.
+            float x = center.CenterVector.X - cur.CenterVector.X;
+            float y = center.CenterVector.Y - cur.CenterVector.Y;
 
-            // we can also reproject back our estimated transformation back into the current shape, then use that to recalculate translation
+
+            // 
             r = new Point3d(
                 pitch,
                 yaw,
@@ -352,9 +367,89 @@ namespace Headtracker_Console
 
             // Translation
             t = new Point3d(
-                0, 0, 0
+                x, y, 0
             );
+        }
+        public static void DrawCircleAtPoint(Mat frame, Point2f point2Draw, Scalar sl, int r = 2)
+        {
+            Cv2.Circle(frame, point2Draw.R2P(), r, sl, 5);
+        }
 
+        public static Point2f Rotate(Point2f point, Point2f origin, double angleDegrees)
+        {
+            // Convert angle from degrees to radians
+            double angleRadians = angleDegrees * Math.PI / 180.0;
+
+            // Calculate the sine and cosine of the angle
+            double cosTheta = Math.Cos(angleRadians);
+            double sinTheta = Math.Sin(angleRadians);
+
+            // Translate point back to origin
+            float translatedX = point.X - origin.X;
+            float translatedY = point.Y - origin.Y;
+            translatedY = translatedY * -1;
+
+            // Rotate point
+            float rotatedX = (float)(translatedX * cosTheta - translatedY * sinTheta);
+            float rotatedY = (float)(translatedX * sinTheta + translatedY * cosTheta);
+
+            // Translate point back to its original position
+            float finalX = rotatedX + origin.X;
+            float finalY = rotatedY + origin.Y;
+
+            return new Point2f(finalX, finalY);
+        }
+
+        public static double CalculateRotation(Point2f origin, Point2f point)
+        {
+            // Calculate the difference in coordinates
+            float deltaX = point.X - origin.X;
+
+            float deltaY = point.Y - origin.Y;
+            deltaY = deltaY * -1;
+
+
+            // Calculate the angle in radians using atan2
+            double angleRadians = Math.Atan2(deltaY, deltaX);
+
+            // Convert the angle to degrees
+            double angleDegrees = angleRadians * (180.0 / Math.PI);
+
+            // Ensure the angle is between -90 and 90 degrees
+
+            //if(angleDegrees > 90)
+            //{
+            //    angleDegrees = angleDegrees * -1;
+            //}
+            //else
+            //{
+            //    angleDegrees = 180 - angleDegrees;
+            //}
+
+            return angleDegrees;
+        }
+
+        public static Point2f EstimateOrigin(Point2f centerVector, Point2f curVector)
+        {
+            return new Point2f();
+        }
+
+        public static Point2f AdjustMagnitude(Point2f cur, float desiredLength)
+        {
+            // Calculate the current magnitude of the vector
+            float currentMagnitude = cur.Magnitude();
+
+            // Avoid division by zero
+            if (currentMagnitude == 0)
+            {
+                return new Point2f(0, 0);
+            }
+
+            // Calculate the scaling factor
+            float scale = desiredLength / currentMagnitude;
+
+            // Scale the vector components
+            return new Point2f(cur.X * scale, cur.Y * scale);
         }
 
         #endregion

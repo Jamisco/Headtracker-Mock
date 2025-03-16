@@ -34,25 +34,14 @@ namespace Headtracker_Console
         {
             get
             {
-                Point2f P0 = Points[0];    // Left base
-                Point2f P2 = Points[2];    // Right base
-                Point2f P1 = Points[1];    // Top point
-                // Vector math with Point2f
-                Point2f baseVector = P2 - P0;
-                Point2f topVector = P1 - P0;
-
-                // Projection formula
-                float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
-                float baseLengthSq = (baseVector.X * baseVector.X + baseVector.Y * baseVector.Y);
-                float t = dot / baseLengthSq;
-
-                // Intersection point
-                Point2f intersection = new Point2f(
-                    P0.X + baseVector.X * t,
-                    P0.Y + baseVector.Y * t
-                );
-
-                return intersection;
+                return GetPerpendicularPoint(Points[1], Points[0], Points[2]);
+            }
+        }
+        public Point2f HeightCenterIntercept
+        {
+            get
+            {
+                return GetPerpendicularPoint(Centroid, Points[1], TopBaseIntercept);
             }
         }
 
@@ -70,6 +59,28 @@ namespace Headtracker_Console
                 return MidPoint2f(Points[1], TopBaseIntercept);
             }
         }
+        public Point2f HeightVector
+        {
+            get
+            {
+                return TopBaseIntercept - Points[1];
+            }
+        }
+        public Point2f BaseVector
+        {
+            get
+            {
+                return Points[2] - Points[0];
+            }
+        }
+        public Point2f CenterVector
+        {
+            get
+            {
+                return Centroid - HeightCenterIntercept;
+            }
+        }
+
 
         public float Height
         {
@@ -148,6 +159,13 @@ namespace Headtracker_Console
 
             Points = new Point2f[] { left, top, right };
         }
+
+        //public TShape UndoVector(TShape cur, TShape center)
+        //{
+        //    Point2f h
+        //}
+
+
         public void Translate(Point2f p)
         {
             List<Point2f> newPoints = new List<Point2f>();
@@ -167,7 +185,7 @@ namespace Headtracker_Console
             List<Point2f> newPoints = new List<Point2f>();
             foreach (var point in Points)
             {
-                newPoints.Add(point - cDiff);
+                newPoints.Add(point + cDiff);
             }
 
             Points = newPoints.ToArray();
@@ -191,12 +209,82 @@ namespace Headtracker_Console
             Point2f mid = MidPoint2f(Points[0], Points[2]);
             Point2f mid2 = new Point2f(Points[1].X, mid.Y);
 
-            Point2f P0 = Points[0];    // Left base
-            Point2f P2 = Points[2];    // Right base
-            Point2f P1 = Points[1];    // Top point
-            // Vector math with Point2f
-            Point2f baseVector = P2 - P0;
-            Point2f topVector = P1 - P0;
+            Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, 1);
+            Cv2.Line(frame, Points[1].R2P(), TopBaseIntercept.R2P(), sl, 1);
+            Cv2.Line(frame, Centroid.R2P(), HeightCenterIntercept.R2P(), sl, 1);
+
+
+            string height = Point2f.Distance(Points[1], TopBaseIntercept).ToString("0.00");
+            string width = Point2f.Distance(Points[0], Points[2]).ToString("0.00");
+
+            string cWdith = Point2f.Distance(Centroid, HeightCenterIntercept).ToString("0.00");
+
+            Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, height, (Points[1] + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, cWdith, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+        }
+
+        public void DrawCentriod(Mat frame)
+        {
+            Cv2.Circle(frame, Centroid.R2P(), 2, Scalar.White, 2);
+
+            Cv2.Circle(frame, TopCentroid.R2P(), 2, Scalar.Yellow, 2);
+
+
+        }
+        public void PrintData(Mat frame, Point2f pos)
+        {
+            Point2f py = new Point2f(0, 20);
+            int c = 1;
+            Scalar sl = Scalar.White;
+            Cv2.PutText(frame, "Base Vector: " + BaseVector.R2P().ToString2(), pos.R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Height Vector: " + HeightVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Center Vector: " + CenterVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+        }
+
+        public List<string> GetPrintData()
+        {
+            List<string> data = new List<string>();
+
+            data.Add("Base Vector: " + BaseVector.ToString2());
+            data.Add("Height Vector: " + HeightVector.ToString2());
+            data.Add("Center Vector: " + CenterVector.ToString2());
+
+            return data;
+        }
+
+        public void ShowCurrentShape(Mat displayFrame, Point2f printPos)
+        {
+            try
+            {
+                DrawShape(displayFrame, Scalar.Red);
+                DrawCentriod(displayFrame);
+
+                PrintData(displayFrame, printPos);
+
+            }
+            catch (Exception)
+            {
+
+            }
+        }
+
+        /// <summary>
+        /// Gets the point that is perpendicular to the line from p1 to p2.
+        /// The returned point when combined with line p1 to p2 will form a right angle.
+        /// </summary>
+        /// <param name="p0"></param>
+        /// <param name="p1"></param>
+        /// <param name="p2"></param>
+        /// <returns></returns>
+        public Point2f GetPerpendicularPoint(Point2f p0, Point2f p1, Point2f p2)
+        {
+            Point2f baseVector = p2 - p1;
+            Point2f topVector = p0 - p1;
 
             // Projection formula
             float dot = (topVector.X * baseVector.X + topVector.Y * baseVector.Y);
@@ -205,59 +293,11 @@ namespace Headtracker_Console
 
             // Intersection point
             Point2f intersection = new Point2f(
-                P0.X + baseVector.X * t,
-                P0.Y + baseVector.Y * t
+                p1.X + baseVector.X * t,
+                p1.Y + baseVector.Y * t
             );
 
-            Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, 1);
-            Cv2.Line(frame, Points[1].R2P(), intersection.R2P(), sl, 1);
-
-            string height = Point2f.Distance(Points[1], intersection).ToString("0.00");
-            string width = Point2f.Distance(Points[0], Points[2]).ToString("0.00");   
-            Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
-
-            Cv2.PutText(frame, height, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
-        }
-
-        public void DrawCentriod(Mat frame)
-        {
-            Cv2.Circle(frame, Centroid.R2P(), 2, Scalar.White, 2);
-        }
-        public void PrintData(Mat frame, Point2f pos)
-        {
-            Point2f py = new Point2f(0, 20);
-            Scalar sl = Scalar.White;
-
-            Point2f baseVector, heightVector;
-            Point2f mid = MidPoint2f(Points[0], Points[2]);
-
-            baseVector = Points[2] - Points[0];
-            heightVector = Points[1] - mid;
-
-            Cv2.PutText(frame, "Base Vector: " + baseVector.ToString2(), pos.R2P(), HersheyFonts.HersheyPlain, 1, sl);
-
-            Cv2.PutText(frame, "Height Vector: " + heightVector.ToString2(), (pos + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
-
-            float ratio = heightVector.Magnitude() / baseVector.Magnitude();
-
-            Cv2.PutText(frame, "Base Height Ratio: " + ratio.ToString(), (pos + py.Multiply(5)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
-        }
-
-        public void ShowCurrentShape(Mat displayFrame)
-        {
-            try
-            {
-                DrawShape(displayFrame, Scalar.Red);
-                DrawCentriod(displayFrame);
-
-                Point2f pos = new Point2f(10, 80);
-                PrintData(displayFrame, pos);
-
-            }
-            catch (Exception)
-            {
-
-            }
+            return intersection;
         }
 
     }

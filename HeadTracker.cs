@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using static Headtracker_Console.Calibrator;
 
 namespace Headtracker_Console
 {
@@ -26,6 +27,20 @@ namespace Headtracker_Console
         public static Point2f FRAMECENTER = new Point2f(FRAMEWIDTH / 2, FRAMEHEIGHT / 2);
         public const int CaptureFps = 30;
         public const bool TEST = false;
+        public Point2f printStartPos
+        {
+            get
+            {
+                Point2f p = new Point2f(10, 20);
+
+                p = p + (printNewLine * printLine);
+                printLine += 5;
+
+                return p;
+            }
+        }
+        public Point2f printNewLine = new Point2f(0, 20);
+        int printLine = 1;
 
         public enum ShapeType { Triangle, Polygon, TShape };
 
@@ -53,81 +68,9 @@ namespace Headtracker_Console
         public Triangle centerTriangle { get; private set; }
         public Polygon centerPolygon { get; private set; }
         public TShape centerTShape { get; private set; }
-        public static Point2f[] RP(Point2f[] points, float rollAngle)
-        {
-            // Calculate center point
-            float centerX = (points[0].X + points[1].X + points[2].X) / 3;
-            float centerY = (points[0].Y + points[1].Y + points[2].Y) / 3;
-
-            // Convert angle to radians
-            double angleRad = rollAngle * Math.PI / 180;
-
-            // Rotate points around center
-            Point2f[] rotatedPoints = new Point2f[3];
-            for (int i = 0; i < 3; i++)
-            {
-                float dx = points[i].X - centerX;
-                float dy = points[i].Y - centerY;
-
-                rotatedPoints[i] = new Point2f(
-                    centerX + (float)(dx * Math.Cos(angleRad) - dy * Math.Sin(angleRad)),
-                    centerY + (float)(dx * Math.Sin(angleRad) + dy * Math.Cos(angleRad))
-                );
-            }
-
-            return rotatedPoints;
-        }
-
-        public static Point2f[] PP(Point2f[] points, float angleDegrees)
-        {
-            // Use bottom center as pivot point
-            float baseX = (points[1].X + points[2].X) / 2;  // bottom center X
-            float baseY = points[1].Y;  // bottom Y (since both bottom points have same Y)
-
-            double angleRad = angleDegrees * Math.PI / 180;
-            float scale = (float)Math.Cos(angleRad);
-
-            Point2f[] pitchedPoints = new Point2f[3];
-
-            // Keep bottom points fixed
-            pitchedPoints[1] = points[1];  // right
-            pitchedPoints[2] = points[2];  // left
-
-            // Calculate top point position
-            float height = baseY - points[0].Y;  // original height
-            float newHeight = height * scale;    // compressed height
-
-            // Move top point
-            pitchedPoints[0] = new Point2f(
-                points[0].X,
-                baseY - newHeight  // move up from base by new height
-            );
-
-            return pitchedPoints;
-        }
-
-        public static Point2f[] YP(Point2f[] points, float angleDegrees)
-        {
-            float centerX = (points[0].X + points[1].X + points[2].X) / 3;
-            float centerY = (points[0].Y + points[1].Y + points[2].Y) / 3;
-
-            double angleRad = -angleDegrees * Math.PI / 180;  // Negative to reverse direction
-            float scale = (float)Math.Cos(angleRad);  // Foreshortening effect
-
-            Point2f[] yawedPoints = new Point2f[3];
-            for (int i = 0; i < 3; i++)
-            {
-                float dx = points[i].X - centerX;
-                // X coordinates compress based on angle, direction reversed
-                yawedPoints[i] = new Point2f(
-                    centerX + (dx * scale),
-                    points[i].Y
-                );
-            }
-            return yawedPoints;
-        }
-
         public bool HasCenter { get; set; } = false;
+
+        public Calibrator calibrator = new Calibrator();
 
         public void StartTracking()
         {
@@ -162,6 +105,8 @@ namespace Headtracker_Console
 
         public int frameCount = 0;
 
+        public bool IsCalibrating { get; set; } = false;
+
         public void ReadKey()
         {
             while (true)
@@ -177,10 +122,29 @@ namespace Headtracker_Console
 
                         Console.WriteLine("New Center Set");
                     }
-                    else if (k.Key == ConsoleKey.C)
+                    else if (k.Key == ConsoleKey.X)
                     {
                         Console.WriteLine("Prediction Cleared");
                         PoseTransformation.ClearOffsets();
+                    }
+                    else if (k.Key == ConsoleKey.C)
+                    {
+                        IsCalibrating = !IsCalibrating;
+
+                        string text = IsCalibrating ? "Started" : "Stopped";
+
+                        Console.WriteLine(text + " Calibration");
+                    }
+                    else if (k.Key == ConsoleKey.E)
+                    {
+                        if (IsCalibrating)
+                        {
+                            calibrator.CalibrateKeyPress(CalibrateType.Roll);
+
+                            string text = calibrator.CalibratingRoll ?                               "Started" : "Stopped";
+
+                            Console.WriteLine(text + " Roll Calibration");
+                        }
                     }
                 }
             }
@@ -197,11 +161,6 @@ namespace Headtracker_Console
             while (isTracking)
             {
                 capture.Read(frame);
-
-                //if (frame.Empty() || frame.IsThesame(prevFrame))
-                //{
-                //    continue;
-                //}
 
                 var ledPoints = ExtractLedPoints(frame);
 
@@ -235,19 +194,33 @@ namespace Headtracker_Console
                             curTShape = t;
                         }
 
-                        curTShape.ShowCurrentShape(displayFrame);
+                        curTShape.ShowCurrentShape(displayFrame, printStartPos);
 
                         break;
                     default:
                         break;
                 }
+                printLine = 0;
 
-                if (HasCenter)
+                if (IsCalibrating)
                 {
-                    ShowCenterTriangle(displayFrame);
-                }
+                    if (HasCenter)
+                    {
+                        calibrator.DrawGraph(displayFrame,  centerTShape.Centroid);
 
-                ShowHeadPose(displayFrame);
+                        calibrator.AddShapeState(curTShape);
+
+                    }
+                }
+                else
+                {
+                    if (HasCenter)
+                    {
+                        ShowCenterTriangle(displayFrame);
+                    }
+
+                    ShowHeadPose(displayFrame);
+                }
 
                 ShowFrameCounter(displayFrame);
 
@@ -325,7 +298,7 @@ namespace Headtracker_Console
                 {
                     Moments moments = Cv2.Moments(contourAreas[i].Item1);
 
-                    Point2f center = new Point2f((int)(moments.M10 /    moments.M00), (int)(moments.M01 / moments.M00));
+                    Point2f center = new Point2f((int)(moments.M10 / moments.M00), (int)(moments.M01 / moments.M00));
 
                     pulses.Add((center, area));
                 }
@@ -335,7 +308,7 @@ namespace Headtracker_Console
 
             float minDistance = 10;
 
-            if(pulses.Count > 4)
+            if (pulses.Count > 4)
             {
                 int sds = 2;
             }
@@ -395,10 +368,8 @@ namespace Headtracker_Console
 
                         centerTShape.DrawShape(displayFrame, Scalar.White, true);
                         centerTShape.DrawCentriod(displayFrame);
-                        Point2f pos = new Point2f(10, 20);
 
-                        centerTShape.PrintData(displayFrame, pos);
-
+                        centerTShape.PrintData(displayFrame, printStartPos);
 
                         break;
                     default:
@@ -434,6 +405,8 @@ namespace Headtracker_Console
                 default:
                     break;
             }
+
+            calibrator.UpdateCenter(centerTShape);
 
             HasCenter = true;
         }
@@ -491,10 +464,19 @@ namespace Headtracker_Console
 
             try
             {
-                // check gpt, but if we computer pnp on both the center and the current points, we can get the difference between the two and use that to determine the angle of rotation
                 //PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
 
-                PoseTransformation.EstimateTransformation2(centerTShape, curTShape, out Point3d r2, out Point3d t2);
+                //PoseTransformation.EstimateTransformation2(displayFrame, centerTShape, curTShape, out Point3d r2, out Point3d t2);
+
+
+                if(!calibrator.HasCalibration)
+                {
+                    return;
+                }
+                calibrator.GetUnitVector(out Point3f ur, out Point3f ut);
+
+                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, ur, ut, out Point3f r2, out Point3f t2);
+
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
                 //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
@@ -532,12 +514,15 @@ namespace Headtracker_Console
             }
         }
 
-
+        public void DrawCircleAtPoint(Point2f point2Draw, Scalar sl)
+        {
+            Cv2.Circle(displayFrame, point2Draw.R2P(), 2, sl, 5);
+        }
 
         private static UdpClient udpClient;
         private static readonly string localhost = "127.0.0.1";
         private static readonly int port = 9876;
-        public static void SendData(Point3d r)
+        public static void SendData(Point3f r)
         {
             string pitch = r.X.ToString("F2");
             string yaw = r.Y.ToString("F2");

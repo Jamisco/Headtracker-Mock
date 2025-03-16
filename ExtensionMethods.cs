@@ -17,13 +17,25 @@ namespace Headtracker_Console
         }
 
         /// <summary>
-        /// Radians to Degrees
+        /// Rounds the point 
         /// </summary>
         /// <param name="p"></param>
         /// <returns></returns>
         public static string R2P(this Point3d p)
         {
             Point3d b = new Point3d(Math.Round(p.X), Math.Round(p.Y), Math.Round(p.Z));
+
+            return "" + b.X + ", " + b.Y + ", " + b.Z;
+        }
+
+        /// <summary>
+        /// Rounds the point 
+        /// </summary>
+        /// <param name="p"></param>
+        /// <returns></returns>
+        public static string R2P(this Point3f p)
+        {
+            Point3f b = new Point3f((float)Math.Round(p.X), (float)Math.Round(p.Y), (float)Math.Round(p.Z));
 
             return "" + b.X + ", " + b.Y + ", " + b.Z;
         }
