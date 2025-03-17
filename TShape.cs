@@ -7,9 +7,9 @@ using static Headtracker_Console.HeadTracker;
 
 namespace Headtracker_Console
 {
+    [Serializable]
     public class TShape
     {
-
         public Point2f[] Points;
         public Point2f Centroid
         {
@@ -113,23 +113,23 @@ namespace Headtracker_Console
                 return true;
             }
         }
-        public Mat PointsMatrix
-        {
-            get
-            {
-                int rows = Points.Length;
+        //public readonly Mat PointsMatrix
+        //{
+        //    get
+        //    {
+        //        int rows = Points.Length;
 
-                Mat m = new Mat(rows, 2, MatType.CV_32FC1);
+        //        Mat m = new Mat(rows, 2, MatType.CV_32FC1);
 
-                for (int i = 0; i < rows; i++)
-                {
-                    m.Set(i, 0, Points[i].X);
-                    m.Set(i, 1, Points[i].Y);
-                }
+        //        for (int i = 0; i < rows; i++)
+        //        {
+        //            m.Set(i, 0, Points[i].X);
+        //            m.Set(i, 1, Points[i].Y);
+        //        }
 
-                return m;
-            }
-        }
+        //        return m;
+        //    }
+        //}
 
         public TShape(List<Point2f> leds)
         {

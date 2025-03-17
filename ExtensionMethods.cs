@@ -122,5 +122,12 @@ namespace Headtracker_Console
 
             return new Point3f(x / points.Length, y / points.Length, z / points.Length);
         }
+
+        // write function to normalize float between 2 given numbers
+
+        public static float Normalize(float value, float min, float max)
+        {
+            return (value - min) / (max - min);
+        }
     }
 }

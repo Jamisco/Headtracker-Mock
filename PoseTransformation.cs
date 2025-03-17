@@ -6,6 +6,7 @@ using System.Linq;
 using static Headtracker_Console.ExtensionMethods;
 using static Headtracker_Console.HeadTracker;
 using Emgu.CV.CvEnum;
+using static Headtracker_Console.Calibrator;
 
 namespace Headtracker_Console
 {
@@ -276,29 +277,24 @@ namespace Headtracker_Console
 
             // the yaw angle can be derived by using the depth and get the max distance with the center can deviate from the center line. Said max distance is the max distance of the depth, or the depth from the base points to the back point
 
-            // we can also use zoom to scale
-
-            Point2f centerDiff = cur.CenterVector - center.CenterVector;
-
-            // instead of using this scales, values have to be normalize from 0 to 90
-            float angle = 2f;
-            float ra = .3f;
-
-            //pitch = centerDiff.Y * angle;
-            //yaw = centerDiff.X * angle;
-            //roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
-
-            // essetianly we treat the height vector as a center line, and then use atan2 to measure the angles
             Point2f cp1 = center.HeightVector;
             Point2f cp2 = cur.HeightVector;
 
             // modify matrix to account for 00 top left system
 
+            Point2f centerDiff = cur.CenterVector - center.CenterVector;
+            float angle = 2f;
             pitch = centerDiff.Y * angle;
 
             float hw = FRAMECENTER.X;
             roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
+
+            float maxPixel = GetInchToPixel(center) * CameraProperties.objDepth;
+
             yaw = cur.CenterVector.X - center.CenterVector.X;
+            yaw = yaw / maxPixel * 90;
+            // this works also
+            //yaw = cur.CenterVector.X - center.CenterVector.X;
 
             r = new Point3f(
                     pitch,
@@ -307,66 +303,49 @@ namespace Headtracker_Console
                 );
         }
 
-        public static void EstimateTransformation3(Mat frame, TShape center, TShape cur, Point3f unitR, Point3f unitT, out Point3f r, out Point3f t)
+        public static float inchToPixel = 0f; // inches
+        public static float GetInchToPixel(TShape center)
+        {
+            // so 1 inch is equal to x pixels. X is what we return
+            return center.BaseVector.X / CameraProperties.objWidth;
+        }
+        public static void EstimateTransformation3(Mat frame, TShape center, TShape cur, UnitVector puv, UnitVector yuv, UnitVector ruv, out Point3f r, out Point3f t)
         {
             GetPureRotation(center, cur, out r);
 
-            float expectedXT = center.TopCentroid.X + (r.Z * unitT.X);
+            float expectedXT = center.TopCentroid.X + (r.Z * puv.Translation.X);
             float actualXT = cur.TopCentroid.X;
 
             float x = expectedXT - actualXT;
 
+            float expectedYT = center.TopCentroid.Y + (r.Z * puv.Translation.Y);
+            float actualYT = cur.TopCentroid.Y;
+
+            float y = expectedYT - actualYT;
+
+            r = new Point3f(r.X * puv.Rotation.X, r.Y * puv.Rotation.Y, r.Z * puv.Rotation.Z);
+
             // Translation
             t = new Point3f(
-                x, 0, 0
+                x, y, 0
             );
 
         }
 
-        public static void EstimateTransformation2(Mat frame, TShape center, TShape cur, out Point3d r, out Point3d t)
+        public static void EstimateTransformation2(Mat frame, TShape center, TShape cur, out Point3f r, out Point3f t)
         {
-            float pitch, yaw, roll;
-
-            // the yaw angle can be derived by using the depth and get the max distance with the center can deviate from the center line. Said max distance is the max distance of the depth, or the depth from the base points to the back point
-
-            // we can also use zoom to scale
-
-            Point2f centerDiff = cur.CenterVector - center.CenterVector;
-
-            // instead of using this scales, values have to be normalize from 0 to 90
-            float angle = 2f;
-            float ra = .3f;
-
-            //pitch = centerDiff.Y * angle;
-            //yaw = centerDiff.X * angle;
-            //roll = ((cur.Points[0] - cur.Points[2]).Y - (center.Points[0] - center.Points[2]).Y) * ra;
-
-            // essetianly we treat the height vector as a center line, and then use atan2 to measure the angles
-            Point2f cp1 = center.HeightVector;
-            Point2f cp2 = cur.HeightVector;
-
-            // modify matrix to account for 00 top left system
-
-            pitch = centerDiff.Y * angle;
-
-            float hw = FRAMECENTER.X;
-            roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
-            yaw = cur.CenterVector.X - center.CenterVector.X;
-            // ---------------------
+            
+            GetPureRotation(center, cur, out Point3f r2);
 
             float x = center.CenterVector.X - cur.CenterVector.X;
             float y = center.CenterVector.Y - cur.CenterVector.Y;
 
 
             // 
-            r = new Point3d(
-                pitch,
-                yaw,
-                roll
-            );
+            r = r2;
 
             // Translation
-            t = new Point3d(
+            t = new Point3f(
                 x, y, 0
             );
         }

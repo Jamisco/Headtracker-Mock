@@ -127,7 +127,7 @@ namespace Headtracker_Console
                         Console.WriteLine("Prediction Cleared");
                         PoseTransformation.ClearOffsets();
                     }
-                    else if (k.Key == ConsoleKey.C)
+                    else if (k.Key == ConsoleKey.A)
                     {
                         IsCalibrating = !IsCalibrating;
 
@@ -139,11 +139,27 @@ namespace Headtracker_Console
                     {
                         if (IsCalibrating)
                         {
-                            calibrator.CalibrateKeyPress(CalibrateType.Roll);
+                            calibrator.CalibrateKeyPress(RotationType.Roll);
 
-                            string text = calibrator.CalibratingRoll ?                               "Started" : "Stopped";
+                            string text = calibrator.CalibratingRoll ? "Started" : "Stopped";
 
                             Console.WriteLine(text + " Roll Calibration");
+                        }
+                    }
+                    else if (k.Key == ConsoleKey.S)
+                    {
+                        if (IsCalibrating)
+                        {
+                            calibrator.SaveCurrentData();
+
+                        }
+                    }
+                    else if (k.Key == ConsoleKey.D)
+                    {
+                        if (IsCalibrating)
+                        {
+                            calibrator.ClearCurrentCalibration();
+
                         }
                     }
                 }
@@ -208,8 +224,14 @@ namespace Headtracker_Console
                     {
                         calibrator.DrawGraph(displayFrame,  centerTShape.Centroid);
 
+                        calibrator.DrawCenterData(displayFrame);
+
                         calibrator.AddShapeState(curTShape);
 
+                    }
+                    else
+                    {
+                        calibrator.DrawGraph(displayFrame,  curTShape.Centroid);
                     }
                 }
                 else
@@ -466,16 +488,19 @@ namespace Headtracker_Console
             {
                 //PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
 
-                //PoseTransformation.EstimateTransformation2(displayFrame, centerTShape, curTShape, out Point3d r2, out Point3d t2);
+                //PoseTransformation.EstimateTransformation2(displayFrame, centerTShape, curTShape, out Point3f r2, out Point3f t2);
 
+                // save unit vectors so we dont have to keep calibrating.
+                // consider finding that rotation origin instead of using unit vectors.
 
-                if(!calibrator.HasCalibration)
+                if (!calibrator.HasCalibration)
                 {
                     return;
                 }
-                calibrator.GetUnitVector(out Point3f ur, out Point3f ut);
 
-                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, ur, ut, out Point3f r2, out Point3f t2);
+                calibrator.GetUnitVector(RotationType.Roll, out UnitVector puv);
+
+                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, puv, puv, out Point3f r2, out Point3f t2);
 
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
