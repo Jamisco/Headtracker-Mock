@@ -60,6 +60,11 @@ namespace Headtracker_Console
             return new Point2f(Math.Abs(p.X), Math.Abs(p.Y));
         }
 
+        public static Point3f Abs(this Point3f p)
+        {
+            return new Point3f(Math.Abs(p.X), Math.Abs(p.Y), Math.Abs(p.Z));
+        }
+
         public static float Magnitude(this Point2f p)
         {
             return (float)Math.Sqrt(p.X * p.X + p.Y * p.Y);
@@ -87,6 +92,11 @@ namespace Headtracker_Console
             }
 
             return false;
+        }
+
+        public static Point3f Multiply(this Point3f p1, Point3f p2)
+        {
+            return new Point3f(p1.X * p2.X, p1.Y * p2.Y, p1.Z * p2.Z);
         }
         public static Point2f MidPoint2f(Point2f p1, Point2f p2)
         {

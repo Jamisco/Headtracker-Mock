@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using static Headtracker_Console.ExtensionMethods;
 using static Headtracker_Console.HeadTracker;
 
@@ -159,6 +160,13 @@ namespace Headtracker_Console
 
             Points = new Point2f[] { left, top, right };
         }
+
+        [JsonConstructor]
+        public TShape(Point2f[] points)
+        {
+            Points = points;
+        }
+
 
         //public TShape UndoVector(TShape cur, TShape center)
         //{

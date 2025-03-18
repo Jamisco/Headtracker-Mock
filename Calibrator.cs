@@ -1,4 +1,8 @@
-﻿using OpenCvSharp;
+﻿using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
+using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Double;
+using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -75,17 +79,43 @@ namespace Headtracker_Console
         public bool CalibratingPitch { get; set; } = false;
         public bool CalibratingYaw { get; set; } = false;
         public bool CalibratingRoll { get; set; } = false;
+
+        public bool IsCalibratingAny
+        {
+            get
+            {
+                return CalibratingPitch || CalibratingYaw || CalibratingRoll;
+            }
+        }
         public void CalibrateKeyPress(RotationType t)
         {
             switch (t)
             {
                 case RotationType.Pitch:
+
+                    if (IsCalibratingAny && CalibratingPitch == false)
+                    {
+                        return;
+                    }
+
                     CalibratingPitch = !CalibratingPitch;
                     break;
                 case RotationType.Yaw:
+
+                    if (IsCalibratingAny && CalibratingYaw == false)
+                    {
+                        return;
+                    }
+
                     CalibratingYaw = !CalibratingYaw;
                     break;
                 case RotationType.Roll:
+
+                    if (IsCalibratingAny && CalibratingRoll == false)
+                    {
+                        return;
+                    }
+
                     CalibratingRoll = !CalibratingRoll;
                     break;
                 default:
@@ -93,17 +123,32 @@ namespace Headtracker_Console
             }
         }
 
-        bool hasCenter = false;
         private TShape Center;
-        public void UpdateCenter(TShape center)
+        public void UpdateCenter(TShape center, bool overwrite)
         {
+            // this will occur only the first time, just in case there isnt anything preloaded
+            if (Center == null)
+            {
+                PitchHolder = new ShapeHolder(Center, Axis.Y);
+                YawHolder = new ShapeHolder(Center, Axis.X);
+                RollHolder = new ShapeHolder(Center, Axis.X);
+            }
+
             Center = center;
 
-            if (!hasCenter)
+            if(overwrite)
             {
-                PitchHolder = new ShapeHolder(center, Axis.Y);
-                YawHolder = new ShapeHolder(center, Axis.X);
-                RollHolder = new ShapeHolder(center, Axis.X);
+                InitHolders();
+            }
+        }
+
+        private void InitHolders()
+        {
+            if (Center != null)
+            {
+                PitchHolder = new ShapeHolder(Center, Axis.Y);
+                YawHolder = new ShapeHolder(Center, Axis.X);
+                RollHolder = new ShapeHolder(Center, Axis.X);
             }
         }
         public void GetUnitVector(RotationType calType, out UnitVector u)
@@ -156,7 +201,7 @@ namespace Headtracker_Console
         {
             IncludeFields = true,
             IgnoreReadOnlyProperties = true,
-            WriteIndented = true
+            WriteIndented = true,
         };
 
         private static string splitter = "\n\n-----\n\n";
@@ -183,20 +228,19 @@ namespace Headtracker_Console
         {
             Point2f curCenter = Center.TopCentroid;
 
-            if(CalibratingPitch)
+            if (CalibratingPitch)
             {
                 PitchHolder.DrawShapes(frame, curCenter);
             }
-            else if(CalibratingYaw)
+            else if (CalibratingYaw)
             {
                 YawHolder.DrawShapes(frame, curCenter);
             }
-            else if(CalibratingRoll)
+            else if (CalibratingRoll)
             {
                 RollHolder.DrawShapes(frame, curCenter);
             }
         }
-
         public void RetrieveSaveData()
         {
             if (!System.IO.File.Exists(savePath))
@@ -217,6 +261,7 @@ namespace Headtracker_Console
             try
             {
                 PitchHolder = JsonSerializer.Deserialize<ShapeHolder>(sections[0], options);
+
                 YawHolder = JsonSerializer.Deserialize<ShapeHolder>(sections[1], options);
                 RollHolder = JsonSerializer.Deserialize<ShapeHolder>(sections[2], options);
 
@@ -227,20 +272,20 @@ namespace Headtracker_Console
             {
                 Console.WriteLine("Unable to Retrieve Calibration Data");
 
-                if (PitchHolder.CenterShape == null)
-                {
-                    PitchHolder = new ShapeHolder();
-                }
+                //if (PitchHolder.CenterShape == null)
+                //{
+                //    PitchHolder = new ShapeHolder();
+                //}
 
-                if (YawHolder.CenterShape == null)
-                {
-                    YawHolder = new ShapeHolder();
-                }
+                //if (YawHolder.CenterShape == null)
+                //{
+                //    YawHolder = new ShapeHolder();
+                //}
 
-                if (RollHolder.CenterShape == null)
-                {
-                    RollHolder = new ShapeHolder();
-                }
+                //if (RollHolder.CenterShape == null)
+                //{
+                //    RollHolder = new ShapeHolder();
+                //}
             }
         }
 
@@ -250,13 +295,57 @@ namespace Headtracker_Console
         /// </summary>
         public struct UnitVector
         {
-            public Point3f Rotation;
-            public Point3f Translation;
+            public Point3f pRotation;
+            public Point3f nRotation;
 
-            public UnitVector(Point3f r, Point3f t)
+            // polynomial regression model to fit translation values
+            public (double[] xc, double[] yc) pTrans;
+            public (double[] xc, double[] yc) nTrans;
+
+
+
+            public UnitVector(Point3f pr, Point3f nr, (double[], double[]) pt, (double[], double[]) nt)
             {
-                Rotation = r;
-                Translation = t;
+                pRotation = pr;
+                nRotation = nr;
+
+                pTrans = pt;
+                nTrans = nt;
+            }
+
+            public void OffsetRotation(Point3f pureRotation, out Point3f offset)
+            {
+                float unit = (pRotation.X == 1) ? pureRotation.X : (pRotation.Y == 1) ? pureRotation.Y : (pRotation.Z == 1) ? pureRotation.Z : 0;
+
+                Point3f r2Use = (unit > 0) ? pRotation : nRotation;
+
+                Point3f t1 = r2Use.Multiply(unit);
+
+                offset = pureRotation - t1;
+
+                offset.X = (offset.X == 0) ? t1.X : offset.X;
+                offset.Y = (offset.Y == 0) ? t1.Y : offset.Y;
+                offset.Z = (offset.Z == 0) ? t1.Z : offset.Z;
+            }
+            public Point2f ExpectedTranslation(float unit)
+            {
+                var coeff = (unit > 0) ? pTrans : nTrans;
+
+                return PredictPoint(unit, coeff.xc, coeff.yc);
+
+            }
+            private Point2f PredictPoint(double angle, double[] coefficientsX, double[] coefficientsY)
+            {
+                double xNew = 0.0;
+                double yNew = 0.0;
+
+                for (int i = 0; i < coefficientsX.Length; i++)
+                {
+                    xNew += coefficientsX[i] * Math.Pow(angle, i);
+                    yNew += coefficientsY[i] * Math.Pow(angle, i);
+                }
+
+                return new Point2f((float)xNew, (float)yNew);
             }
         }
 
@@ -341,53 +430,105 @@ namespace Headtracker_Console
                     Negative.Add(shape);
                 }
             }
+
+            public (double[], double[]) FitModel(List<TShape> shapes)
+            {
+                List<(double angle, Point2f point)> data = new List<(double angle, Point2f point)>();
+
+                foreach (TShape shape in shapes)
+                {
+                    PoseTransformation.GetPureRoll(CenterShape, shape,
+                        out float roll);
+
+                    data.Add((roll, shape.Centroid - CenterShape.Centroid));
+                    // in this process of applying polynomial regression in order to derive translation values
+                }
+
+                int degree = 2;
+                int n = data.Count;
+                var X = new DenseMatrix(n, degree + 1);
+                var yX = new DenseVector(n);
+                var yY = new DenseVector(n);
+
+                for (int i = 0; i < n; i++)
+                {
+                    double angle = data[i].angle;
+                    yX[i] = data[i].point.X;
+                    yY[i] = data[i].point.Y;
+
+                    for (int j = 0; j <= degree; j++)
+                    {
+                        X[i, j] = Math.Pow(angle, j);
+                    }
+                }
+
+                var Xt = X.Transpose();
+                var XtX = Xt * X;
+                var XtyX = Xt * yX;
+                var XtyY = Xt * yY;
+
+                var coefficientsX = XtX.Solve(XtyX);
+                var coefficientsY = XtX.Solve(XtyY);
+
+                return (coefficientsX.ToArray(), coefficientsY.ToArray());
+            }
+
             public UnitVector GetUnitVector()
             {
-                Point2f centerT = CenterShape.TopCentroid;
-                TShape last = Negative.Last();
+                UnitVector unitVector;
+
+                GetUnitData(Positive, out Point3f pRot, out (double[], double[]) pTrans);
+
+                GetUnitData(Negative, out Point3f nRot, out (double[], double[]) nTrans);
+
+                unitVector = new UnitVector(pRot, nRot, pTrans, nTrans);
+
+                return unitVector;
+            }
+
+            void GetUnitData(List<TShape> shapes, out Point3f uv, out (double[], double[]) tModel)
+            {
+                TShape last = shapes.Last();
 
                 PoseTransformation.GetPureRotation(CenterShape, last,
-                    out Point3f r2);
+               out Point3f rot);
 
-                Point2f tDiff = last.TopCentroid - centerT;
+                Point3f aRot = rot.Abs();
 
-                float biggestT = Math.Max(Math.Abs(tDiff.X), Math.Abs(tDiff.Y));
+                // max rotation
+                float mr = Math.Max(aRot.X, Math.Max(aRot.Y, aRot.Z));
 
-                float roll = (float)r2.Z;
+                uv = new Point3f(rot.X / mr, rot.Y / mr, rot.Z / mr);
 
-
-                Point3f r = new Point3f(r2.X / roll, r2.Y / roll, r2.Z / roll);
-                Point3f t = new Point3f(tDiff.X / roll, tDiff.Y / roll, 0);
-
-                return new UnitVector(r, t);
+                tModel = FitModel(shapes);
             }
 
 
-        public void DrawShapes(Mat frame, Point2f curCenter)
-        {
-            foreach (var shape in Positive)
+            public void DrawShapes(Mat frame, Point2f curCenter)
             {
-                Point2f shapeCenter = CenterShape.Centroid;
+                foreach (var shape in Positive)
+                {
+                    Point2f shapeCenter = CenterShape.Centroid;
 
-                Point2f diff = shape.Centroid - curCenter;
+                    Point2f diff = shape.Centroid - curCenter;
 
-                Point2f adjPos = curCenter + diff;
+                    Point2f adjPos = curCenter + diff;
 
-                Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Red, 2);
+                    Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Red, 2);
+                }
+
+                foreach (var shape in Negative)
+                {
+                    Point2f shapeCenter = CenterShape.Centroid;
+
+                    Point2f diff = shape.Centroid - curCenter;
+
+                    Point2f adjPos = curCenter + diff;
+
+                    Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Green, 2);
+                }
             }
-
-            foreach (var shape in Negative)
-            {
-                Point2f shapeCenter = CenterShape.Centroid;
-
-                Point2f diff = shape.Centroid - curCenter;
-
-                Point2f adjPos = curCenter + diff;
-
-                Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Green, 2);
-            }
-        }
-        public void Clear()
+            public void Clear()
             {
                 Positive?.Clear();
                 Negative?.Clear();

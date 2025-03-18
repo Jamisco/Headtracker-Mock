@@ -131,9 +131,36 @@ namespace Headtracker_Console
                     {
                         IsCalibrating = !IsCalibrating;
 
+                        if(IsCalibrating)
+                        {
+                            calibrator.UpdateCenter(centerTShape, true);
+                        }
+
                         string text = IsCalibrating ? "Started" : "Stopped";
 
                         Console.WriteLine(text + " Calibration");
+                    }
+                    else if (k.Key == ConsoleKey.Q)
+                    {
+                        if (IsCalibrating)
+                        {
+                            calibrator.CalibrateKeyPress(RotationType.Pitch);
+
+                            string text = calibrator.CalibratingPitch ? "Started" : "Stopped";
+
+                            Console.WriteLine(text + " Pitch Calibration");
+                        }
+                    }
+                    else if (k.Key == ConsoleKey.W)
+                    {
+                        if (IsCalibrating)
+                        {
+                            calibrator.CalibrateKeyPress(RotationType.Yaw);
+
+                            string text = calibrator.CalibratingYaw ? "Started" : "Stopped";
+
+                            Console.WriteLine(text + " Yaw Calibration");
+                        }
                     }
                     else if (k.Key == ConsoleKey.E)
                     {
@@ -428,8 +455,6 @@ namespace Headtracker_Console
                     break;
             }
 
-            calibrator.UpdateCenter(centerTShape);
-
             HasCenter = true;
         }
         private void SetOffset()
@@ -498,9 +523,14 @@ namespace Headtracker_Console
                     return;
                 }
 
-                calibrator.GetUnitVector(RotationType.Roll, out UnitVector puv);
+                // some values dont really cross the center of the frame, thus the postive and negative values are not really accurate or sometimes no existent. New methods must be devised to store states
 
-                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, puv, puv, out Point3f r2, out Point3f t2);
+                calibrator.GetUnitVector(RotationType.Pitch, out UnitVector puv);
+                calibrator.GetUnitVector(RotationType.Yaw, out UnitVector yuv);
+                calibrator.GetUnitVector(RotationType.Roll, out UnitVector ruv);
+
+
+                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, yuv, ruv, out Point3f r2, out Point3f t2);
 
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
@@ -517,13 +547,6 @@ namespace Headtracker_Console
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-                c++;
-
-                Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(),
-            start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
-
-                Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
-                    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
                 SendData(r2);
 

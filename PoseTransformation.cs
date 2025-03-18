@@ -271,6 +271,14 @@ namespace Headtracker_Console
 
         }
 
+        public static void GetPureRoll(TShape center, TShape cur, out float roll)
+        {
+            Point2f cp1 = center.HeightVector;
+            Point2f cp2 = cur.HeightVector;
+
+            float hw = FRAMECENTER.X;
+            roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
+        }
         public static void GetPureRotation(TShape center, TShape cur, out Point3f r)
         {
             float pitch, yaw, roll;
@@ -280,11 +288,17 @@ namespace Headtracker_Console
             Point2f cp1 = center.HeightVector;
             Point2f cp2 = cur.HeightVector;
 
-            // modify matrix to account for 00 top left system
+            // im gonna assume this is account due to height being too short
 
-            Point2f centerDiff = cur.CenterVector - center.CenterVector;
-            float angle = 2f;
-            pitch = centerDiff.Y * angle;
+            float curP = -(cur.TopCentroid.Y - cur.Centroid.Y);
+
+            float centerP = -(center.TopCentroid.Y - center.Centroid.Y);
+
+            float hbr = cur.Height / cur.Width;
+
+            float chbr = center.Height / center.Width;
+
+            pitch = (curP - centerP) / (centerP) * 45;
 
             float hw = FRAMECENTER.X;
             roll = ((cp2.X / hw) - (cp1.X / hw)) * 90;
@@ -313,17 +327,28 @@ namespace Headtracker_Console
         {
             GetPureRotation(center, cur, out r);
 
-            float expectedXT = center.TopCentroid.X + (r.Z * puv.Translation.X);
-            float actualXT = cur.TopCentroid.X;
+            Point2f expT = new Point2f();
 
-            float x = expectedXT - actualXT;
+            //expT += puv.Translation * r.X;
+            //expT += yuv.Translation * r.Y;
+            expT += ruv.ExpectedTranslation(r.Z);
 
-            float expectedYT = center.TopCentroid.Y + (r.Z * puv.Translation.Y);
-            float actualYT = cur.TopCentroid.Y;
+            Point2f tempt = cur.Centroid - center.Centroid;
+            Point2f actualT = new Point2f(tempt.X, tempt.Y);
 
-            float y = expectedYT - actualYT;
+            float x = expT.X - actualT.X;
+            float y = expT.Y - actualT.Y;
 
-            r = new Point3f(r.X * puv.Rotation.X, r.Y * puv.Rotation.Y, r.Z * puv.Rotation.Z);
+            Point3f offsetRotation = r;
+
+            //puv.OffsetRotation(r, out r);
+            //yuv.OffsetRotation(r, out r);
+            //ruv.OffsetRotation(r, out r);
+
+            Point start = new Point(0, 400);
+
+            Cv2.PutText(frame, "Actual Translation: " + actualT.R2P(),
+                        start, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
             // Translation
             t = new Point3f(

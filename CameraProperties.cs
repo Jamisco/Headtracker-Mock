@@ -38,7 +38,6 @@ namespace Headtracker_Console
         public static float objWidth = 7.5f;
         public static float objDepth = 4f; // technically its 4 inches, but we cant possible turn our heads that well
 
-
         public static Point3f[] SetObjectPointsFromCenter(Point2f[] points)
         {
             // scale distances between each point to one
