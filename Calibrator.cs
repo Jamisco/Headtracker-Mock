@@ -72,7 +72,7 @@ namespace Headtracker_Console
         {
             get
             {
-                return RollHolder.Negative.Last() != null;
+                return PitchHolder.CenterShape != null && YawHolder.CenterShape != null && RollHolder.CenterShape != null;
             }
         }
 
@@ -126,14 +126,6 @@ namespace Headtracker_Console
         private TShape Center;
         public void UpdateCenter(TShape center, bool overwrite)
         {
-            // this will occur only the first time, just in case there isnt anything preloaded
-            if (Center == null)
-            {
-                PitchHolder = new ShapeHolder(Center, Axis.Y);
-                YawHolder = new ShapeHolder(Center, Axis.X);
-                RollHolder = new ShapeHolder(Center, Axis.X);
-            }
-
             Center = center;
 
             if(overwrite)
@@ -146,9 +138,9 @@ namespace Headtracker_Console
         {
             if (Center != null)
             {
-                PitchHolder = new ShapeHolder(Center, Axis.Y);
-                YawHolder = new ShapeHolder(Center, Axis.X);
-                RollHolder = new ShapeHolder(Center, Axis.X);
+                PitchHolder = new ShapeHolder(Center, RotationType.Pitch);
+                YawHolder = new ShapeHolder(Center, RotationType.Yaw);
+                RollHolder = new ShapeHolder(Center, RotationType.Roll);
             }
         }
         public void GetUnitVector(RotationType calType, out UnitVector u)
@@ -295,44 +287,37 @@ namespace Headtracker_Console
         /// </summary>
         public struct UnitVector
         {
-            public Point3f pRotation;
-            public Point3f nRotation;
+            public Point3f rotation;
 
             // polynomial regression model to fit translation values
-            public (double[] xc, double[] yc) pTrans;
-            public (double[] xc, double[] yc) nTrans;
-
-
-
-            public UnitVector(Point3f pr, Point3f nr, (double[], double[]) pt, (double[], double[]) nt)
+            public (double[] xc, double[] yc) PtransCoeff;
+            public (double[] xc, double[] yc) NtransCoeff;
+            public UnitVector(Point3f pr, (double[], double[]) pt, (double[], double[]) nt)
             {
-                pRotation = pr;
-                nRotation = nr;
+                rotation = pr;
 
-                pTrans = pt;
-                nTrans = nt;
+                PtransCoeff = pt;
+                NtransCoeff = nt;
             }
 
             public void OffsetRotation(Point3f pureRotation, out Point3f offset)
             {
-                float unit = (pRotation.X == 1) ? pureRotation.X : (pRotation.Y == 1) ? pureRotation.Y : (pRotation.Z == 1) ? pureRotation.Z : 0;
+                // truth be told a regresion model should also be used to offset rotations.
+                // but for now, this will wait
 
-                Point3f r2Use = (unit > 0) ? pRotation : nRotation;
-
-                Point3f t1 = r2Use.Multiply(unit);
-
-                offset = pureRotation - t1;
-
-                offset.X = (offset.X == 0) ? t1.X : offset.X;
-                offset.Y = (offset.Y == 0) ? t1.Y : offset.Y;
-                offset.Z = (offset.Z == 0) ? t1.Z : offset.Z;
+                offset = new Point3f();
             }
             public Point2f ExpectedTranslation(float unit)
             {
-                var coeff = (unit > 0) ? pTrans : nTrans;
+                if(unit > 0)
+                {
+                    return PredictPoint(unit, PtransCoeff.xc, PtransCoeff.yc);
 
-                return PredictPoint(unit, coeff.xc, coeff.yc);
-
+                }
+                else
+                {
+                    return PredictPoint(unit, NtransCoeff.xc, NtransCoeff.yc);
+                }
             }
             private Point2f PredictPoint(double angle, double[] coefficientsX, double[] coefficientsY)
             {
@@ -350,97 +335,46 @@ namespace Headtracker_Console
         }
 
 
-
         [Serializable]
         public struct ShapeHolder
         {
-            public List<TShape> Positive;
-            public List<TShape> Negative;
             public TShape CenterShape;
-            public Axis shapeAxis;
-            public ShapeHolder(TShape centerShape, Axis axis)
+            public List<(float, TShape)> States;
+            public RotationType RotationType;
+            public ShapeHolder(TShape centerShape, RotationType rotType)
             {
                 CenterShape = centerShape;
-                shapeAxis = axis;
+                RotationType = rotType;
 
-                Positive = new List<TShape>();
-                Negative = new List<TShape>();
+                States = new List<(float, TShape)>();
             }
 
             public void AddShape(TShape shape)
             {
                 float num = 0;
 
-                num = (shapeAxis == Axis.X) ? shape.Centroid.X : shape.Centroid.Y;
+                PoseTransformation.GetPureRotation(CenterShape, shape, out Point3f r);
 
-                if (shapeAxis == Axis.X)
+                num = (RotationType == RotationType.Pitch) ? r.X : (RotationType == RotationType.Yaw) ? r.Y : r.Z;
+
+                bool sameNum = States.Any(x => x.Item1 == num);
+
+                if (!sameNum)
                 {
-                    if (num > CenterShape.Centroid.X)
-                    {
-                        AddPos(shape, num);
-                    }
-                    else
-                    {
-                        AddNeg(shape, num);
-                    }
-                }
-                else
-                {
-                    if (num > CenterShape.Centroid.Y)
-                    {
-                        AddPos(shape, num);
-                    }
-                    else
-                    {
-                        AddNeg(shape, num);
-                    }
-                }
-            }
-            private void AddPos(TShape shape, float num)
-            {
-                if (Positive.Count == 0)
-                {
-                    Positive.Add(shape);
-                    return;
-                }
-
-                TShape last = Positive.Last();
-
-                float num2 = (shapeAxis == Axis.X) ? last.Centroid.X : last.Centroid.Y;
-
-                if (num > num2)
-                {
-                    Positive.Add(shape);
-                }
-            }
-            private void AddNeg(TShape shape, float num)
-            {
-                if (Negative.Count == 0)
-                {
-                    Negative.Add(shape);
-                    return;
-                }
-
-                TShape last = Negative.Last();
-
-                float num2 = (shapeAxis == Axis.X) ? last.Centroid.X : last.Centroid.Y;
-
-                if (num < num2)
-                {
-                    Negative.Add(shape);
+                    States.Add((num, shape));
                 }
             }
 
-            public (double[], double[]) FitModel(List<TShape> shapes)
+
+            public (double[], double[]) FitModel(List<(float, TShape)> shapes)
             {
                 List<(double angle, Point2f point)> data = new List<(double angle, Point2f point)>();
 
-                foreach (TShape shape in shapes)
+                Point2f initDiff = States[0].Item2.Centroid - CenterShape.Centroid;
+                // apply dead zone maybe?
+                foreach (var state in shapes)
                 {
-                    PoseTransformation.GetPureRoll(CenterShape, shape,
-                        out float roll);
-
-                    data.Add((roll, shape.Centroid - CenterShape.Centroid));
+                    data.Add((state.Item1, state.Item2.Centroid - CenterShape.Centroid - initDiff));
                     // in this process of applying polynomial regression in order to derive translation values
                 }
 
@@ -472,23 +406,41 @@ namespace Headtracker_Console
 
                 return (coefficientsX.ToArray(), coefficientsY.ToArray());
             }
-
             public UnitVector GetUnitVector()
             {
                 UnitVector unitVector;
 
-                GetUnitData(Positive, out Point3f pRot, out (double[], double[]) pTrans);
+                List<(float, TShape)> neg = new List<(float, TShape)>();
+                List<(float, TShape)> pos = new List<(float, TShape)>();
 
-                GetUnitData(Negative, out Point3f nRot, out (double[], double[]) nTrans);
+                foreach (var state in States)
+                {
+                    if (state.Item1 < 0)
+                    {
+                        neg.Add(state);
+                    }
+                    else
+                    {
+                        pos.Add(state);
+                    }
+                }
 
-                unitVector = new UnitVector(pRot, nRot, pTrans, nTrans);
+                pos = pos.OrderBy(x => x.Item1).ToList();
+                neg = neg.OrderByDescending(x => x.Item1).ToList();
+
+
+                GetUnitData(pos.ToList(), out Point3f rot, out (double[], double[]) pt);
+
+                GetUnitData(neg.ToList(), out Point3f rot2, out (double[], double[]) nt);
+
+                unitVector = new UnitVector(rot, pt, nt);
 
                 return unitVector;
             }
 
-            void GetUnitData(List<TShape> shapes, out Point3f uv, out (double[], double[]) tModel)
+            void GetUnitData(List<(float, TShape)> shapes, out Point3f uv, out (double[], double[]) tModel)
             {
-                TShape last = shapes.Last();
+                TShape last = shapes.Last().Item2;
 
                 PoseTransformation.GetPureRotation(CenterShape, last,
                out Point3f rot);
@@ -500,38 +452,28 @@ namespace Headtracker_Console
 
                 uv = new Point3f(rot.X / mr, rot.Y / mr, rot.Z / mr);
 
+
+                // since yaw and pitch dont translate, they dont require a regression model for translation prediction
                 tModel = FitModel(shapes);
             }
 
 
             public void DrawShapes(Mat frame, Point2f curCenter)
             {
-                foreach (var shape in Positive)
+                foreach (var shape in States)
                 {
                     Point2f shapeCenter = CenterShape.Centroid;
 
-                    Point2f diff = shape.Centroid - curCenter;
+                    Point2f diff = shape.Item2.Centroid - curCenter;
 
                     Point2f adjPos = curCenter + diff;
 
                     Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Red, 2);
                 }
-
-                foreach (var shape in Negative)
-                {
-                    Point2f shapeCenter = CenterShape.Centroid;
-
-                    Point2f diff = shape.Centroid - curCenter;
-
-                    Point2f adjPos = curCenter + diff;
-
-                    Cv2.Circle(frame, adjPos.R2P(), 2, Scalar.Green, 2);
-                }
             }
             public void Clear()
             {
-                Positive?.Clear();
-                Negative?.Clear();
+                States?.Clear();
             }
         }
     }

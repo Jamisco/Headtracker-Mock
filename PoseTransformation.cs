@@ -326,29 +326,43 @@ namespace Headtracker_Console
         public static void EstimateTransformation3(Mat frame, TShape center, TShape cur, UnitVector puv, UnitVector yuv, UnitVector ruv, out Point3f r, out Point3f t)
         {
             GetPureRotation(center, cur, out r);
+            GetPureRoll(center, cur, out float cRoll);
+
+            Point2f centerT = ruv.ExpectedTranslation(cRoll);
 
             Point2f expT = new Point2f();
 
-            //expT += puv.Translation * r.X;
-            //expT += yuv.Translation * r.Y;
+            // calibration data is wrong..
+            // account for slight deviations from the center by subtracting the first couple of points
+            // or better yet addion points such that 0 angle is center etc
+            //expT.X += cur.CenterVector.X;
+            //expT += puv.ExpectedTranslation(r.X);
+            //expT += yuv.ExpectedTranslation(r.Y);
             expT += ruv.ExpectedTranslation(r.Z);
+            // pitch and yaw modify the translation a little
+            //expT += new Point2f(r.Y, r.Y).Multiply(1.3f);
 
-            Point2f tempt = cur.Centroid - center.Centroid;
-            Point2f actualT = new Point2f(tempt.X, tempt.Y);
+            Point2f actualT = cur.Centroid - center.Centroid;
 
-            float x = expT.X - actualT.X;
+            float x = actualT.X - expT.X;
+
             float y = expT.Y - actualT.Y;
 
             Point3f offsetRotation = r;
 
-            //puv.OffsetRotation(r, out r);
+
+            //puv.OffsetRotation(r, out r); 
             //yuv.OffsetRotation(r, out r);
             //ruv.OffsetRotation(r, out r);
 
             Point start = new Point(0, 400);
+            Point start1 = new Point(0, 420);
 
             Cv2.PutText(frame, "Actual Translation: " + actualT.R2P(),
                         start, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            Cv2.PutText(frame, "Expected Translation: " + expT.R2P(),
+            start1, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
             // Translation
             t = new Point3f(
