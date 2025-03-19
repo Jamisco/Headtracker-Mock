@@ -78,7 +78,7 @@ namespace Headtracker_Console
         {
             get
             {
-                return Centroid - HeightCenterIntercept;
+                return Centroid - TopCentroid;
             }
         }
 
@@ -227,11 +227,15 @@ namespace Headtracker_Console
 
             string cWdith = Point2f.Distance(Centroid, HeightCenterIntercept).ToString("0.00");
 
+            string cHeight = (Centroid.Y - TopCentroid.Y).ToString("0.00");
+
             Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
             Cv2.PutText(frame, height, (Points[1] + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
             Cv2.PutText(frame, cWdith, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, cHeight, (Centroid - xp).R2P(), HersheyFonts.HersheyPlain, 1, sl);
         }
 
         public void DrawCentriod(Mat frame)

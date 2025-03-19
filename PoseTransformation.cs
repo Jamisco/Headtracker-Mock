@@ -332,12 +332,8 @@ namespace Headtracker_Console
 
             Point2f expT = new Point2f();
 
-            // calibration data is wrong..
-            // account for slight deviations from the center by subtracting the first couple of points
-            // or better yet addion points such that 0 angle is center etc
-            //expT.X += cur.CenterVector.X;
-            //expT += puv.ExpectedTranslation(r.X);
-            //expT += yuv.ExpectedTranslation(r.Y);
+
+            // when user zooms in or out , the translation is affected
             expT += ruv.ExpectedTranslation(r.Z);
             // pitch and yaw modify the translation a little
             //expT += new Point2f(r.Y, r.Y).Multiply(1.3f);
@@ -357,6 +353,8 @@ namespace Headtracker_Console
 
             Point start = new Point(0, 400);
             Point start1 = new Point(0, 420);
+            Point start2 = new Point(0, 440);
+
 
             Cv2.PutText(frame, "Actual Translation: " + actualT.R2P(),
                         start, HersheyFonts.HersheyPlain, 1, Scalar.White);
@@ -364,9 +362,24 @@ namespace Headtracker_Console
             Cv2.PutText(frame, "Expected Translation: " + expT.R2P(),
             start1, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
+
+            float maxPixel = GetInchToPixel(center) * CameraProperties.objDepth;
+
+            float yaw = cur.CenterVector.X - center.CenterVector.X;
+            yaw = Math.Abs(yaw / maxPixel);
+
+            float yz = cur.CenterVector.Y - center.CenterVector.Y;
+
+            float exWidth = cur.BaseVector.X + (cur.BaseVector.X * yaw) - yz;
+            float axWidth = center.BaseVector.X;
+
+            z = exWidth - axWidth;
+
+            Cv2.PutText(frame, "Expected Width -- Diff: " + exWidth + " -- " + axWidth, start2, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
             // Translation
             t = new Point3f(
-                x, y, 0
+                x, y, z
             );
 
         }
