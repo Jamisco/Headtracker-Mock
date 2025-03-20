@@ -335,8 +335,6 @@ namespace Headtracker_Console
 
             // when user zooms in or out , the translation is affected
             expT += ruv.ExpectedTranslation(r.Z);
-            // pitch and yaw modify the translation a little
-            //expT += new Point2f(r.Y, r.Y).Multiply(1.3f);
 
             Point2f actualT = cur.Centroid - center.Centroid;
 

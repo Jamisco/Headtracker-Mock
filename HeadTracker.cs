@@ -548,7 +548,7 @@ namespace Headtracker_Console
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
 
-                SendData(r2);
+                SendData(r2, t2);
 
                 //if (HasCenter)
                 //{
@@ -570,11 +570,15 @@ namespace Headtracker_Console
         private static UdpClient udpClient;
         private static readonly string localhost = "127.0.0.1";
         private static readonly int port = 9876;
-        public static void SendData(Point3f r)
+        public static void SendData(Point3f r, Point3f t)
         {
             string pitch = r.X.ToString("F2");
             string yaw = r.Y.ToString("F2");
             string roll = r.Z.ToString("F2");
+
+            string x = t.X.ToString("F2");
+            string y = t.Y.ToString("F2");
+            string z = t.Z.ToString("F2");
 
             if (udpClient == null)
             {
@@ -584,7 +588,7 @@ namespace Headtracker_Console
             try
             {
                 // Format: "pitch,yaw,roll,tx,ty,tz"
-                string data = $"{pitch},{yaw},{roll}";
+                string data = $"{pitch},{yaw},{roll},{x},{y},{z}";
                 byte[] bytes = Encoding.UTF8.GetBytes(data);
                 udpClient.Send(bytes, bytes.Length, localhost, port);
             }
