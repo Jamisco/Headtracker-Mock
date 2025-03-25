@@ -7,6 +7,7 @@ using static Headtracker_Console.ExtensionMethods;
 using static Headtracker_Console.HeadTracker;
 using Emgu.CV.CvEnum;
 using static Headtracker_Console.Calibrator;
+using System.Collections.Generic;
 
 namespace Headtracker_Console
 {
@@ -310,6 +311,10 @@ namespace Headtracker_Console
             // this works also
             //yaw = cur.CenterVector.X - center.CenterVector.X;
 
+            pitch = pitch.RoundToInt();
+            yaw = yaw.RoundToInt();
+            roll = roll.RoundToInt();
+
             r = new Point3f(
                     pitch,
                     yaw,
@@ -323,12 +328,13 @@ namespace Headtracker_Console
             // so 1 inch is equal to x pixels. X is what we return
             return center.BaseVector.X / CameraProperties.objWidth;
         }
+
+        static Point line1 = new Point(0, 400);
+        static Point line2 = new Point(0, 420);
+        static Point line3 = new Point(0, 440);
         public static void EstimateTransformation3(Mat frame, TShape center, TShape cur, UnitVector puv, UnitVector yuv, UnitVector ruv, out Point3f r, out Point3f t)
         {
             GetPureRotation(center, cur, out r);
-            GetPureRoll(center, cur, out float cRoll);
-
-            Point2f centerT = ruv.ExpectedTranslation(cRoll);
 
             Point2f expT = new Point2f();
 
@@ -349,16 +355,12 @@ namespace Headtracker_Console
             //yuv.OffsetRotation(r, out r);
             //ruv.OffsetRotation(r, out r);
 
-            Point start = new Point(0, 400);
-            Point start1 = new Point(0, 420);
-            Point start2 = new Point(0, 440);
-
 
             Cv2.PutText(frame, "Actual Translation: " + actualT.R2P(),
-                        start, HersheyFonts.HersheyPlain, 1, Scalar.White);
+                        line1, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
             Cv2.PutText(frame, "Expected Translation: " + expT.R2P(),
-            start1, HersheyFonts.HersheyPlain, 1, Scalar.White);
+            line2, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
 
             float maxPixel = GetInchToPixel(center) * CameraProperties.objDepth;
@@ -373,31 +375,61 @@ namespace Headtracker_Console
 
             z = exWidth - axWidth;
 
-            Cv2.PutText(frame, "Expected Width -- Diff: " + exWidth + " -- " + axWidth, start2, HersheyFonts.HersheyPlain, 1, Scalar.White);
+            Cv2.PutText(frame, "Expected Width -- Diff: " + exWidth + " -- " + axWidth, line3, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            float div = 10  ;
+            //x = x.RoundToDecimals() / div;
+            //y = y.RoundToDecimals() / div;
+            //z = z.RoundToDecimals() / div;
 
             // Translation
             t = new Point3f(
-                x, y, z
+                x,y,-z
             );
 
         }
 
-        public static void EstimateTransformation2(Mat frame, TShape center, TShape cur, out Point3f r, out Point3f t)
+        public static void EstimateTransformation4(Mat frame, TShape center, TShape cur, out Point3f r, out Point3f t)
         {
-            
-            GetPureRotation(center, cur, out Point3f r2);
+            // the goal for this method will be to reconstruct the original triangle and thus from there decipher the transformation
 
-            float x = center.CenterVector.X - cur.CenterVector.X;
-            float y = center.CenterVector.Y - cur.CenterVector.Y;
+            Point2f baseVectorDiff = cur.BaseVector - center.BaseVector;
+            Point2f heightVectorDiff = cur.HeightVector - center.HeightVector;
+            // flip base to get true yaw
+            Point2f baseFlipped = new Point2f(-baseVectorDiff.Y, baseVectorDiff.X);
 
+            Point2f vectorDiff = heightVectorDiff - baseFlipped;
 
-            // 
-            r = r2;
+            // projected points
+            TShape projectShape = new TShape(cur.Points.ToList());
 
-            // Translation
-            t = new Point3f(
-                x, y, 0
-            );
+            projectShape.AdjustBaseVector(baseVectorDiff, heightVectorDiff);
+            //projectShape.TranslateTo(center.Centroid);
+
+            projectShape.DrawShape(frame, Scalar.Green, false);
+
+            baseVectorDiff = baseVectorDiff.R2P(3);
+            heightVectorDiff = heightVectorDiff.R2P(3);
+            vectorDiff = vectorDiff.R2P(3);
+
+            Cv2.PutText(frame, "Height Diff: " + heightVectorDiff.R2P(),
+            line1, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            Cv2.PutText(frame, "Base Diff: " + baseVectorDiff.R2P(),
+            line2, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            Cv2.PutText(frame, "Vector Diff: " + vectorDiff.R2P(),
+            line3, HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            float z = heightVectorDiff.X;
+
+            float y = vectorDiff.X;
+
+            float x = vectorDiff.Y;
+
+            r = new Point3f(x, y, z);
+
+            t = new Point3f();
         }
         public static void DrawCircleAtPoint(Mat frame, Point2f point2Draw, Scalar sl, int r = 2)
         {

@@ -46,6 +46,7 @@
     <Compile Include="Calibrator.cs" />
     <Compile Include="CameraProperties.cs" />
     <Compile Include="ExtensionMethods.cs" />
+    <Compile Include="KalmanFilter3D.cs" />
     <Compile Include="Polygon.cs" />
     <Compile Include="PoseTransformation.cs" />
     <Compile Include="PoseTransformation2.cs" />

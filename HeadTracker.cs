@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Windows.Forms;
 using static Headtracker_Console.Calibrator;
 
 namespace Headtracker_Console
@@ -27,6 +28,8 @@ namespace Headtracker_Console
         public static Point2f FRAMECENTER = new Point2f(FRAMEWIDTH / 2, FRAMEHEIGHT / 2);
         public const int CaptureFps = 30;
         public const bool TEST = false;
+        public static bool SHOWGRAY = false;
+
         public Point2f printStartPos
         {
             get
@@ -50,6 +53,14 @@ namespace Headtracker_Console
 
         public enum Transformations { Scale, Yaw, Roll, Pitch, X, Y, Z };
         public enum Axis { X, Y };
+
+        public KalmanFilter3D rotateKFilter;
+        public KalmanFilter3D transKFilter;
+
+        public SmoothingFilter rotSmoother;
+        public SmoothingFilter traSmoother;
+
+        float smoothValue = .2f;
         public HeadTracker(int cameraIndex = 0)
         {
             // Initialize the camera
@@ -58,6 +69,14 @@ namespace Headtracker_Console
             capture.FrameHeight = FRAMEHEIGHT;
             capture.FrameWidth = FRAMEWIDTH;
             Console.WriteLine("Size: " + capture.FrameHeight + " - " + capture.FrameWidth);
+        }
+
+        private void InitFilter()
+        {
+            rotateKFilter = new KalmanFilter3D();
+            transKFilter = new KalmanFilter3D();
+            rotSmoother = new SmoothingFilter(smoothValue);
+            traSmoother = new SmoothingFilter(smoothValue);
         }
 
         // Detect contours or blobs (these would correspond to your LEDs/markers)
@@ -209,6 +228,7 @@ namespace Headtracker_Console
 
                 displayFrame = frame.EmptyClone();
                 CloneFrame = frame.EmptyClone();
+                DrawCenterGraph();
 
                 switch (Shape2Use)
                 {
@@ -285,6 +305,7 @@ namespace Headtracker_Console
 
         Point2f offset = new Point2f(0, 150);
 
+
         private List<Point2f> ExtractLedPoints(Mat frame)
         {
             try
@@ -297,12 +318,20 @@ namespace Headtracker_Console
                 HierarchyIndex[] hierarchy;
 
                 // apply gausasain filter
-                Cv2.GaussianBlur(grayFrame, grayFrame, new Size(5, 5), 0);
+                //Cv2.GaussianBlur(grayFrame, grayFrame, new Size(5, 5), 0);
 
-                Cv2.Threshold(grayFrame, grayFrame, 10, 255, ThresholdTypes.Binary);
+                Cv2.Threshold(grayFrame, grayFrame, 30, 150, ThresholdTypes.Binary);
 
-                //Cv2.ImShow("Gray Frame", grayFrame);
 
+                if (SHOWGRAY)
+                {
+                    //Cv2.ImShow("OG Image", frame);
+
+                    Cv2.ImShow("Gray Frame", grayFrame);
+                }
+
+                // pass in the previous points and modify the method so that it favors points that are closer to the previous points.
+                // also make it so that points that are within the blob of said closer points are thesame as the previous points.
                 Cv2.FindContours(grayFrame, out curContours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
 
                 Point2f[] ledPoints;
@@ -456,6 +485,31 @@ namespace Headtracker_Console
             }
 
             HasCenter = true;
+            InitFilter();
+        }
+        private void DrawCenterGraph()
+        {
+            Point2f topMid, botMid;
+            Point2f leftMid, rightMid;
+
+            Size frameSize = displayFrame.Size();
+
+            float height = frameSize.Height;
+            float width = frameSize.Width;
+
+            topMid = new Point2f(width / 2, 0);
+            botMid = new Point2f(width / 2, height);
+
+            Point2f yAdjust = new Point2f(0, 15);
+
+            leftMid = new Point2f(0, height / 2) - yAdjust;
+            rightMid = new Point2f(width, height / 2) - yAdjust;
+
+            Scalar col = Scalar.Teal;
+            int s = 1;
+
+            Cv2.Line(displayFrame, topMid.R2P(), botMid.R2P(), col, s);
+            Cv2.Line(displayFrame, leftMid.R2P(), rightMid.R2P(), col, s);
         }
         private void SetOffset()
         {
@@ -530,8 +584,9 @@ namespace Headtracker_Console
                 calibrator.GetUnitVector(RotationType.Roll, out UnitVector ruv);
 
 
-                PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, yuv, ruv, out Point3f r2, out Point3f t2);
+                //PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, yuv, ruv, out Point3f r2, out Point3f t2);
 
+                PoseTransformation.EstimateTransformation4(displayFrame, centerTShape, curTShape, out Point3f r2, out Point3f t2);
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
                 //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
@@ -541,14 +596,37 @@ namespace Headtracker_Console
 
                 c += 2;
 
-                Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(),
+                deadzone = .5f;
+                r2 = EngageDeadzone(prevR, r2);
+                //t2 = EngageDeadzone(prevT, t2);
+                float sv = .4f;
+
+
+                // the problem is the random up and down jitter
+                // you cant smooth these out using filter because they look like genuine movement.
+                // even as the head moves, this jitter is there, albeit less noticeable.
+                rotSmoother.ChangeAlpha(sv);
+                traSmoother.ChangeAlpha(sv);
+
+                r2 = rotSmoother.Smooth(r2);
+                r2 = rotateKFilter.Update(r2);
+
+                t2 = traSmoother.Smooth(t2);
+                t2 = transKFilter.Update(t2);
+
+                t2 = new Point3f();
+
+                Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(2),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
+                prevR = r2;
+                prevT = t2;
 
-                SendData(r2, t2);
+                //SendData(r2, t2);
+                SendData2OpenTrack(r2, t2);
 
                 //if (HasCenter)
                 //{
@@ -562,6 +640,31 @@ namespace Headtracker_Console
             }
         }
 
+        float deadzone = 1f;
+
+        private Point3f EngageDeadzone(Point3f prev, Point3f cur)
+        {
+            if (Math.Abs(cur.X - prev.X) < deadzone)
+            {
+                cur.X = prev.X;
+            }
+
+            if (Math.Abs(cur.Y - prev.Y) < deadzone)
+            {
+                cur.Y = prev.Y;
+            }
+
+            if (Math.Abs(cur.Z - prev.Z) < deadzone)
+            {
+                cur.Z = prev.Z;
+            }
+
+            return cur;
+        }
+
+        private Point3f prevR = new Point3f();
+        private Point3f prevT = new Point3f();
+
         public void DrawCircleAtPoint(Point2f point2Draw, Scalar sl)
         {
             Cv2.Circle(displayFrame, point2Draw.R2P(), 2, sl, 5);
@@ -569,7 +672,7 @@ namespace Headtracker_Console
 
         private static UdpClient udpClient;
         private static readonly string localhost = "127.0.0.1";
-        private static readonly int port = 9876;
+        private static readonly int port = 4242;
         public static void SendData(Point3f r, Point3f t)
         {
             string pitch = r.X.ToString("F2");
@@ -595,6 +698,23 @@ namespace Headtracker_Console
             catch (Exception e)
             {
                 Console.WriteLine($"UDP Send Error: {e.Message}");
+            }
+        }
+
+        public static void SendData2OpenTrack(Point3f r, Point3f t)
+        {
+            using (UdpClient client = new UdpClient())
+            {
+                client.Connect(localhost, port);
+
+                // Use double (not float) since OpenTrack requires 64-bit values
+                double[] data = { t.X, t.Y, t.Z, r.Y, -r.X, r.Z };
+                byte[] bytes = new byte[data.Length * sizeof(double)]; // Ensure correct size: 6 * 8 bytes = 48 bytes
+
+                Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length); // Copy the data correctly
+
+                client.Send(bytes, bytes.Length); // Send the UDP packet
+
             }
         }
 

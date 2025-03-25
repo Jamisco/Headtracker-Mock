@@ -40,6 +40,13 @@ namespace Headtracker_Console
             return "" + b.X + ", " + b.Y + ", " + b.Z;
         }
 
+        public static string R2P(this Point3f p, int d)
+        {
+            Point3f b = new Point3f((float)Math.Round(p.X, d), (float)Math.Round(p.Y, d), (float)Math.Round(p.Z, d));
+
+            return "" + b.X + ", " + b.Y + ", " + b.Z;
+        }
+
         public static float RTD(float radians)
         {
             return (float)(radians * 180 / Math.PI);
@@ -50,9 +57,19 @@ namespace Headtracker_Console
             return (double)(radians * 180 / Math.PI);
         }
 
-        public static Point R2P(this Point2f p)
+        public static float RoundToInt(this float value)
         {
-            return new Point(Math.Round(p.X), Math.Round(p.Y));
+            return (float)Math.Round(value);
+        }
+
+        public static float RoundToDecimals(this float value, int digit = 2)
+        {
+            return (float)Math.Round(value,digit);
+        }
+
+        public static Point R2P(this Point2f p, int digit = 1)
+        {
+            return new Point(Math.Round(p.X, digit), Math.Round(p.Y, digit));
         }
 
         public static Point2f Abs(this Point2f p)

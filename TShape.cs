@@ -134,7 +134,7 @@ namespace Headtracker_Console
 
         public TShape(List<Point2f> leds)
         {
-            if(leds.Count < 3)
+            if (leds == null ||  leds.Count < 3)
             {
                 Points = new Point2f[0];
                 return;
@@ -144,19 +144,22 @@ namespace Headtracker_Console
 
             // sort points from most left to most right
 
-            points.Sort((a, b) => a.X.CompareTo(b.X));
+            points.Sort((a, b) => a.Y.CompareTo(b.Y));
 
-            Point2f left = points[0];
-            Point2f top = points[1];
+            Point2f top = points[0];
 
-            if(top.Y > left.Y)
+            Point2f left, right;
+
+            if (points[1].X > points[2].X)
             {
-                Point2f temp = top;
-                top = left;
-                left = temp;
+                right = points[1];
+                left = points[2];
             }
-
-            Point2f right = points[2];
+            else
+            {
+                right = points[2];
+                left = points[1];
+            }
 
             Points = new Point2f[] { left, top, right };
         }
@@ -203,6 +206,8 @@ namespace Headtracker_Console
             Point2f px = new Point2f(20, 0);
             Point2f xp = new Point2f(70, 0);
             Point2f py = new Point2f(0, 30);
+            Point2f xp2 = new Point2f(20, 0);
+
 
             int n = Points.Length;
             //Scalar sl = Scalar.White;
@@ -217,9 +222,14 @@ namespace Headtracker_Console
             Point2f mid = MidPoint2f(Points[0], Points[2]);
             Point2f mid2 = new Point2f(Points[1].X, mid.Y);
 
-            Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, 1);
-            Cv2.Line(frame, Points[1].R2P(), TopBaseIntercept.R2P(), sl, 1);
-            Cv2.Line(frame, Centroid.R2P(), HeightCenterIntercept.R2P(), sl, 1);
+            int ls = 2;
+
+            Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, ls);
+            Cv2.Line(frame, Points[1].R2P(), TopBaseIntercept.R2P(), sl, ls);
+            Cv2.Line(frame, Centroid.R2P(), HeightCenterIntercept.R2P(), sl, ls);
+
+            Cv2.Line(frame, Points[0].R2P(), Points[1].R2P(), sl, ls);
+            Cv2.Line(frame, Points[1].R2P(), Points[2].R2P(), sl, ls);
 
 
             string height = Point2f.Distance(Points[1], TopBaseIntercept).ToString("0.00");
@@ -227,15 +237,49 @@ namespace Headtracker_Console
 
             string cWdith = Point2f.Distance(Centroid, HeightCenterIntercept).ToString("0.00");
 
+            string ltDistance = Point2f.Distance(Points[0], Points[1]).ToString("0.00");
+            string rtDistance = Point2f.Distance(Points[1], Points[2]).ToString("0.00");
+
             string cHeight = (Centroid.Y - TopCentroid.Y).ToString("0.00");
 
-            Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+            float ts = 1.3f;
 
-            Cv2.PutText(frame, height, (Points[1] + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+            if(showLengths == false)
+            {
+                return;
+            }
 
-            Cv2.PutText(frame, cWdith, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+            Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, ts, sl);
 
-            Cv2.PutText(frame, cHeight, (Centroid - xp).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+            Cv2.PutText(frame, height, (Points[1] + px).R2P(), HersheyFonts.HersheyPlain, ts, sl);
+
+            Cv2.PutText(frame, cWdith, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, ts, sl);
+
+            Cv2.PutText(frame, cHeight, (Centroid - xp).R2P(), HersheyFonts.HersheyPlain, ts, sl);
+
+            Point2f midp = MidPoint2f(Points[0], Points[1]);
+
+            Cv2.PutText(frame, ltDistance, (midp - xp2 * 4).R2P(), HersheyFonts.HersheyPlain, ts, sl);
+
+            Cv2.PutText(frame, rtDistance, (MidPoint2f(Points[1], Points[2]) + xp2).R2P(), HersheyFonts.HersheyPlain, ts, sl);
+        }
+
+        public void AdjustBaseVector(Point2f baseDiff, Point2f heightDiff)
+        {
+           
+
+        }
+        public void AdjustHeightVector(Point2f vectorDiff)
+        {
+            Point2f hv = Points[1] - TopBaseIntercept;
+
+            vectorDiff = vectorDiff.Multiply(-1);
+
+            Point2f bo = hv + vectorDiff;
+
+            Point2f newTop = TopBaseIntercept + bo;
+
+            Points[1] = newTop;
         }
 
         public void DrawCentriod(Mat frame)
@@ -256,6 +300,54 @@ namespace Headtracker_Console
             Cv2.PutText(frame, "Height Vector: " + HeightVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
             Cv2.PutText(frame, "Center Vector: " + CenterVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            c += 2;
+
+            float nx = CameraProperties.objectSize.X;
+            float ny = CameraProperties.objectSize.Y;
+            float nz = CameraProperties.objectSize.Z;
+
+            float sx = CameraProperties.objScreenSize.X;
+            float sy = CameraProperties.objScreenSize.Y;
+
+            float total = Height + Width;
+            float hr = Height / total;
+            float wr = Width / total;
+            float actualRatio = ny / (nx + ny);
+
+
+
+
+            float pti = CameraProperties.pixelToInch;
+
+            // dfc = distance from cam
+            float curBaseDFC = Width / pti;
+
+            float t2l = (float)Point2f.Distance(TopBaseIntercept, Points[0]) / Width;
+            float t2r = (float)Point2f.Distance(TopBaseIntercept, Points[2]) / Width;
+
+            float choosen = 1 - t2l;
+
+            // the depth the forward points are at
+            float baseDepth = 20;
+
+            float depthInc = (float)Math.Cos(Math.PI * (choosen));
+
+            // the depth from forward point to back point
+            float defaultDFC = (sx * (nz / nx)) / pti;
+            float topDFC = baseDepth + defaultDFC - (defaultDFC * depthInc);
+
+
+            Cv2.PutText(frame, "Height Ratio: " + hr.ToString("0.00"), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Width Ratio: " + wr.ToString("0.00"), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Actual Height Ratio: " + (actualRatio).ToString("0.00"), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Top DFC: " + topDFC.ToString("0.00"), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
+            Cv2.PutText(frame, "Def Top DFC: " + defaultDFC.ToString("0.00"), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+
         }
 
         public List<string> GetPrintData()
@@ -268,7 +360,6 @@ namespace Headtracker_Console
 
             return data;
         }
-
         public void ShowCurrentShape(Mat displayFrame, Point2f printPos)
         {
             try
@@ -283,6 +374,22 @@ namespace Headtracker_Console
             {
 
             }
+        }
+
+        public void RotateShaoe(float angle)
+        {
+            Point2f center = Centroid;
+
+            List<Point2f> np = new List<Point2f>();
+
+            foreach (Point2f p in Points)
+            {
+              Point2f pp = PoseTransformation.Rotate(p, center, angle);
+
+                np.Add(pp);
+            }
+
+            Points = np.ToArray();
         }
 
         /// <summary>

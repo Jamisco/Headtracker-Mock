@@ -28,6 +28,13 @@ namespace Headtracker_Console
 
         static int[] depthPoints = { 0, 0, 0, 0 };
 
+        // this is the measured size new Point3f(7.5f, 9.5f, 6f);
+        public static Point3f objectSize = new Point3f(7.5f, 7.5f, 6f);
+        public static Point2f objScreenSize = new Point2f(225, 214);
+
+        // every x pixels is 1 inch. so if the value is 10, that means every 10 pixels is one inch
+        public static float pixelToInch = 10;
+
         public static Point3f[] objectPoints = new Point3f[] 
         {
             new Point3f(-5f, 0, 0),    // Left
