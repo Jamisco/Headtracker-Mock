@@ -37,9 +37,9 @@ namespace Headtracker_Console
 
         public static Point3f[] objectPoints = new Point3f[] 
         {
-            new Point3f(-5f, 0, 0),    // Left
-            new Point3f(0, -4f, -3),    // Top
-            new Point3f(5f, 0, 0),      // Right
+            new Point3f(-4f, 0, -6f),    // Left
+            new Point3f(0, -10f, 0),    // Top
+            new Point3f(4f, 0, -6f),      // Right
         };
 
         public static float objWidth = 7.5f;

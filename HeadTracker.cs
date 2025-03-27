@@ -290,7 +290,8 @@ namespace Headtracker_Console
 
                     ShowHeadPose(displayFrame);
                 }
-
+                
+InvalidPoint:
                 ShowFrameCounter(displayFrame);
 
                 Cv2.NamedWindow(frameName);
@@ -579,14 +580,16 @@ namespace Headtracker_Console
 
                 // some values dont really cross the center of the frame, thus the postive and negative values are not really accurate or sometimes no existent. New methods must be devised to store states
 
-                calibrator.GetUnitVector(RotationType.Pitch, out UnitVector puv);
-                calibrator.GetUnitVector(RotationType.Yaw, out UnitVector yuv);
-                calibrator.GetUnitVector(RotationType.Roll, out UnitVector ruv);
+                //calibrator.GetUnitVector(RotationType.Pitch, out UnitVector puv);
+                //calibrator.GetUnitVector(RotationType.Yaw, out UnitVector yuv);
+                //calibrator.GetUnitVector(RotationType.Roll, out UnitVector ruv);
 
+
+                calibrator.GetOrigin(RotationType.Roll, out Point2f origin);
 
                 //PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, yuv, ruv, out Point3f r2, out Point3f t2);
 
-                PoseTransformation.EstimateTransformation4(displayFrame, centerTShape, curTShape, out Point3f r2, out Point3f t2);
+                PoseTransformation.EstimateTransformation5(displayFrame, curTShape,  out Point3f r2, out Point3f t2);
 
                 //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
                 //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
@@ -613,8 +616,6 @@ namespace Headtracker_Console
 
                 t2 = traSmoother.Smooth(t2);
                 t2 = transKFilter.Update(t2);
-
-                t2 = new Point3f();
 
                 Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(2),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);

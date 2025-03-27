@@ -132,7 +132,23 @@ namespace Headtracker_Console
         //    }
         //}
 
-        public TShape(List<Point2f> leds)
+        public static bool IsValidPoint(List<Point2f> points)
+        {
+            bool valid = true;
+
+            foreach (var point in points)
+            {
+                if (point.X < 0 || point.X >= FRAMEWIDTH || point.Y < 0 || point.Y >= FRAMEHEIGHT)
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            return valid;
+        }
+
+            public TShape(List<Point2f> leds)
         {
             if (leds == null ||  leds.Count < 3)
             {
@@ -301,6 +317,7 @@ namespace Headtracker_Console
 
             Cv2.PutText(frame, "Center Vector: " + CenterVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
+            return;
             c += 2;
 
             float nx = CameraProperties.objectSize.X;
@@ -330,7 +347,7 @@ namespace Headtracker_Console
 
             // the depth the forward points are at
             float baseDepth = 20;
-
+            
             float depthInc = (float)Math.Cos(Math.PI * (choosen));
 
             // the depth from forward point to back point

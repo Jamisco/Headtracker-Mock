@@ -164,6 +164,30 @@ namespace Headtracker_Console
                     break;
             }
         }
+
+        public void GetOrigin(RotationType calType, out Point2f o)
+        {
+            switch (calType)
+            {
+                case RotationType.Pitch:
+                    PitchHolder.FindOrigin(out o);
+
+                    break;
+                case RotationType.Yaw:
+                    YawHolder.FindOrigin(out o);
+
+
+                    break;
+                case RotationType.Roll:
+                    RollHolder.FindOrigin(out o);
+                    break;
+                default:
+                    RollHolder.FindOrigin(out o);
+
+                    break;
+            }
+        }
+
         public void AddShapeState(TShape shape)
         {
             if (shape.Points.Length < 3)
@@ -365,7 +389,50 @@ namespace Headtracker_Console
                 }
             }
 
+            public void FindOrigin(out Point2f origin)
+            {
+                var shapes = States.ToList();
 
+                if (shapes.Count < 2)
+                    throw new ArgumentException("At least two shapes are required to find the origin.");
+
+                // Variables to accumulate sums for solving the linear system
+                float sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, sumYY = 0;
+                int n = shapes.Count;
+
+                // Iterate through the shapes and calculate the components
+                for (int i = 0; i < n; i++)
+                {
+                    var (angle, shape) = shapes[i];
+
+                    // Convert roll angle from degrees to radians
+                    float theta = angle * (float)(Math.PI / 180.0);
+
+                    float cosTheta = (float)Math.Cos(theta);
+                    float sinTheta = (float)Math.Sin(theta);
+
+                    // Get the centroid of the current shape
+                    Point2f c = shape.TopCentroid;
+
+                    // Accumulate the sums (circle fitting)
+                    sumX += c.X;
+                    sumY += c.Y;
+                    sumXX += c.X * cosTheta + c.Y * sinTheta;
+                    sumYY += c.Y * cosTheta - c.X * sinTheta;
+                    sumXY += c.X * sinTheta - c.Y * cosTheta;
+                }
+
+                // Solve for the origin of rotation
+                float originX = (sumX * sumYY - sumY * sumXY) / (sumXX - sumXY);
+                float originY = (sumY * sumXX - sumX * sumXY) / (sumYY - sumXY);
+
+                origin = new Point2f(originX / n, originY / n);
+
+                Point2f cd = CenterShape.TopCentroid - CenterShape.TopBaseIntercept;
+
+
+                origin = new Point2f(origin.X / cd.X, origin.Y / cd.Y);
+            }
             public (double[], double[]) FitModel(List<(float, TShape)> shapes)
             {
                 List<(double angle, Point2f point)> data = new List<(double angle, Point2f point)>();
@@ -456,7 +523,6 @@ namespace Headtracker_Console
                 // since yaw and pitch dont translate, they dont require a regression model for translation prediction
                 tModel = FitModel(shapes);
             }
-
 
             public void DrawShapes(Mat frame, Point2f curCenter)
             {

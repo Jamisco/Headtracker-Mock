@@ -72,6 +72,11 @@ namespace Headtracker_Console
             return new Point(Math.Round(p.X, digit), Math.Round(p.Y, digit));
         }
 
+        public static Point3f Round(this Point3f p, int digit = 1)
+        {
+            return new Point3f((float)Math.Round(p.X, digit), (float)Math.Round(p.Y, digit), (float)Math.Round(p.Z, digit));
+        }
+
         public static Point2f Abs(this Point2f p)
         {
             return new Point2f(Math.Abs(p.X), Math.Abs(p.Y));

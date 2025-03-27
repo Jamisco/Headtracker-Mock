@@ -8,6 +8,7 @@ using static Headtracker_Console.HeadTracker;
 using Emgu.CV.CvEnum;
 using static Headtracker_Console.Calibrator;
 using System.Collections.Generic;
+using static OpenCvSharp.FileStorage;
 
 namespace Headtracker_Console
 {
@@ -24,7 +25,7 @@ namespace Headtracker_Console
         static Mat rvecGuess = Mat.Zeros(3, 1, MatType.CV_64FC1);
         static Mat tvecGuess = Mat.Zeros(3, 1, MatType.CV_64FC1);
 
-        static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64F);
+        static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64FC1);
         static Mat distCoeffs = Mat.Zeros(1, 5, MatType.CV_64FC1);
 
         public static Point3f tOffset = new Point3f();
@@ -35,14 +36,16 @@ namespace Headtracker_Console
         static float depth = -100;
         public static void ResetPrediction()
         {
+            rvecGuess = rvecGuess.EmptyClone();
+            tvecGuess = rvecGuess.EmptyClone();
 
-            rvecGuess.Set<double>(0, 0, 0);
-            rvecGuess.Set<double>(1, 0, 0);
-            rvecGuess.Set<double>(2, 0, -8);
+            //rvecGuess.Set<double>(0, 0, 0);
+            //rvecGuess.Set<double>(1, 0, 0);
+            //rvecGuess.Set<double>(2, 0, -8);
 
-            tvecGuess.Set<double>(0, 0, 0.1f);
-            tvecGuess.Set<double>(1, 0, 0.1f);
-            tvecGuess.Set<double>(2, 0, 10f);
+            //tvecGuess.Set<double>(0, 0, 0.1f);
+            //tvecGuess.Set<double>(1, 0, 0.1f);
+            //tvecGuess.Set<double>(2, 0, 10f);
 
             //depth += .1f;
         }
@@ -93,24 +96,22 @@ namespace Headtracker_Console
 
         static float tx = 2;
         static float ty = -5;
+        static float objectScaler = 10f;
+        static Point3f initTranslation = new Point3f(0f, 0f, 30);
 
         public static void SetPrediction(Point2f[] points)
         {
             Point2f centriod = GetCentriod(points);
 
-            Point2f frameDiff = FRAMECENTER - centriod;
+            // the z number doesnt matter that much, but it must be high
 
-            float num = 5;
-            frameDiff = frameDiff.Multiply(1 / num);
-
-            tvecGuess.Set<double>(0, 0, -2);
-            tvecGuess.Set<double>(1, 0, 5);
-            tvecGuess.Set<double>(2, 0, -40);
+            tvecGuess.Set<double>(0, 0, initTranslation.X);
+            tvecGuess.Set<double>(1, 0, initTranslation.Y);
+            tvecGuess.Set<double>(2, 0, initTranslation.Z);
 
             rvecGuess.Set<double>(0, 0, 0);
             rvecGuess.Set<double>(1, 0, 0);
             rvecGuess.Set<double>(2, 0, 0);
-
         }
 
         public static void EstimateTransformation(
@@ -256,15 +257,20 @@ namespace Headtracker_Console
 
             if (HeadTracker.Shape2Use == ShapeType.TShape)
             {
-                TShape shape = new TShape(projectedPoints.ToList());
-                shape.DrawShape(frame, Scalar.Green, true);
-
+                if(TShape.IsValidPoint(projectedPoints.ToList()))
+                {
+                    TShape shape = new TShape(projectedPoints.ToList());
+                    shape.DrawShape(frame, Scalar.Green, true);
+                }
+                else
+                {
+                    Cv2.PutText(frame, "Invalid Shape", new Point(80, 200), HersheyFonts.HersheyPlain, 5, Scalar.Red);
+                }
             }
             else
             {
                 Polygon shape = new Polygon(projectedPoints.ToList());
                 shape.DrawShape(frame, Scalar.Green, true);
-
             }
 
             Cv2.ImShow("Projected Points", frame);
@@ -377,19 +383,19 @@ namespace Headtracker_Console
 
             Cv2.PutText(frame, "Expected Width -- Diff: " + exWidth + " -- " + axWidth, line3, HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-            float div = 10  ;
+            float div = 10;
             //x = x.RoundToDecimals() / div;
             //y = y.RoundToDecimals() / div;
             //z = z.RoundToDecimals() / div;
 
             // Translation
             t = new Point3f(
-                x,y,-z
+                x, y, -z
             );
 
         }
 
-        public static void EstimateTransformation4(Mat frame, TShape center, TShape cur, out Point3f r, out Point3f t)
+        public static void EstimateTransformation4(Mat frame, TShape center, TShape cur, Point2f od, out Point3f r, out Point3f t)
         {
             // the goal for this method will be to reconstruct the original triangle and thus from there decipher the transformation
 
@@ -403,10 +409,19 @@ namespace Headtracker_Console
             // projected points
             TShape projectShape = new TShape(cur.Points.ToList());
 
-            projectShape.AdjustBaseVector(baseVectorDiff, heightVectorDiff);
+            //projectShape.AdjustBaseVector(baseVectorDiff, heightVectorDiff);
             //projectShape.TranslateTo(center.Centroid);
 
             projectShape.DrawShape(frame, Scalar.Green, false);
+
+            FindOrigin(center, cur, out Point2f origin);
+
+            tx += 10;
+            Point2f tr = Rotate(cur.TopCentroid, origin, tx);
+
+            DrawCircleAtPoint(frame, origin, Scalar.Red, 5);
+            DrawCircleAtPoint(frame, tr, Scalar.Beige, 5);
+
 
             baseVectorDiff = baseVectorDiff.R2P(3);
             heightVectorDiff = heightVectorDiff.R2P(3);
@@ -431,6 +446,103 @@ namespace Headtracker_Console
 
             t = new Point3f();
         }
+
+        public static void EstimateTransformation5(
+                Mat frame,
+                TShape shape,   // Current 2D points
+                out Point3f r,               // Rotation angles
+                out Point3f t)               // Translation vector
+        {
+            //ResetPrediction();
+            Point3f[] objPoints = CameraProperties.objectPoints.ToArray();
+            //Point3f[] objPoints = CameraProperties.SetObjectPointsFromCenter(curPoints);
+
+            Point2f[] curPoints = shape.Points;
+
+            // used to scale the object values if need me
+            for (int i = 0; i < objPoints.Length; i++)
+            {
+                Point3f p = objPoints[i];
+
+                objPoints[i] = p.Multiply(1 / objectScaler);
+            }
+
+            // predict only the first frame
+            if (frameAfterCenter == 0)
+            {
+                SetPrediction(curPoints);
+            }
+
+            string rd = rvecGuess.Dump();
+            string td = tvecGuess.Dump();
+
+            // Convert arrays to InputArray
+            using (InputArray objectPointsInput = InputArray.Create(objPoints))
+            using (InputArray imagePointsInput = InputArray.Create(curPoints))
+            using (InputArray cameraMatrixInput = InputArray.Create(cameraMatrix))
+            using (InputArray distCoeffsInput = InputArray.Create(distCoeffs))
+            using (OutputArray rvecOutput = OutputArray.Create(rvecGuess))
+            using (OutputArray tvecOutput = OutputArray.Create(tvecGuess))
+            {
+                // Solve for current pose with initial guess
+                Cv2.SolvePnP(
+                    objectPointsInput,
+                    imagePointsInput,
+                    cameraMatrixInput,
+                    distCoeffsInput,
+                    rvecOutput,
+                    tvecOutput,
+                    useExtrinsicGuess: true,  // useExtrinsicGuess = true
+                    flags: SolvePnPFlags.Iterative
+                );
+
+
+                // Get the results  
+                Mat rvec = rvecOutput.GetMat();
+                Mat tvec = tvecOutput.GetMat();
+
+                string tDump = tvec.Dump();
+                string rDump = rvec.Dump();
+
+                //ProjectPoints(rvec, tvec);
+
+                ExtractAngles(rvec, out r);
+                ExtractTranslation(tvec, out t);
+
+                Point2f start = new Point2f(300, 380);
+                Point2f line = new Point2f(0, 20);
+                int c = 0;
+
+                Cv2.PutText(frame, "Rotation: " + r.R2P(3),
+                        (start + line.Multiply(c++)).R2P(3), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+
+                Cv2.PutText(frame, "Translation: " + t.R2P(3),
+                        (start + line.Multiply(c++)).R2P(3), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+                // Translation
+                t = new Point3f(
+                    t.X * objectScaler,
+                    t.Y * objectScaler,
+                    t.Z * (objectScaler / initTranslation.Z)
+                );
+
+                //t = t.Multiply(objectScaler);
+
+                if (frameAfterCenter == 0)
+                {
+                    rOffset = r;
+                    tOffset = t;
+                }
+
+                r = r - rOffset;
+                t = t - tOffset;
+
+                frameAfterCenter++;
+            }
+        }
+
+
         public static void DrawCircleAtPoint(Mat frame, Point2f point2Draw, Scalar sl, int r = 2)
         {
             Cv2.Circle(frame, point2Draw.R2P(), r, sl, 5);
@@ -459,6 +571,74 @@ namespace Headtracker_Console
             float finalY = rotatedY + origin.Y;
 
             return new Point2f(finalX, finalY);
+        }
+
+        public static void FindOrigin(TShape center, TShape cur, out Point2f origin)
+        {
+            // Ensure there are 3 points (for accurate calculation)
+            if (center.Points.Length != 3 || cur.Points.Length != 3)
+                throw new ArgumentException("Shapes must contain exactly 3 points.");
+
+            // Calculate midpoint between corresponding points
+            Point2f m1 = new Point2f((center.Points[0].X + cur.Points[0].X) / 2, (center.Points[0].Y + cur.Points[0].Y) / 2);
+            Point2f m2 = new Point2f((center.Points[1].X + cur.Points[1].X) / 2, (center.Points[1].Y + cur.Points[1].Y) / 2);
+
+            // Calculate perpendicular vectors
+            Point2f v1 = new Point2f(cur.Points[0].Y - center.Points[0].Y, center.Points[0].X - cur.Points[0].X);
+            Point2f v2 = new Point2f(cur.Points[1].Y - center.Points[1].Y, center.Points[1].X - cur.Points[1].X);
+
+            // Solve intersection of the perpendicular bisectors
+            float a1 = v1.Y;
+            float b1 = -v1.X;
+            float c1 = a1 * m1.X + b1 * m1.Y;
+
+            float a2 = v2.Y;
+            float b2 = -v2.X;
+            float c2 = a2 * m2.X + b2 * m2.Y;
+
+            float det = a1 * b2 - a2 * b1;
+            if (Math.Abs(det) < 1e-6)
+                throw new InvalidOperationException("Points are collinear; origin cannot be found.");
+
+            // Calculate origin of rotation (intersection point)
+            origin = new Point2f(
+                (b2 * c1 - b1 * c2) / det,
+                (a1 * c2 - a2 * c1) / det
+            );
+        }
+
+
+        public static void ExtractAngles(Mat rvec, out Point3f rot)
+        {
+            Mat rotationMatrix = new Mat();
+            Cv2.Rodrigues(rvec, rotationMatrix);
+
+            // For yaw (Y rotation)
+            double yaw = Math.Atan2(-rotationMatrix.Get<double>(2, 0),
+            Math.Sqrt(rotationMatrix.Get<double>(2, 1) * rotationMatrix.Get<double>(2, 1) +
+            rotationMatrix.Get<double>(2, 2) * rotationMatrix.Get<double>(2, 2)));
+
+            // For roll (Z rotation)
+            double roll = Math.Atan2(rotationMatrix.Get<double>(1, 0),
+                                    rotationMatrix.Get<double>(0, 0));
+
+            double pitch = Math.Atan2(rotationMatrix.Get<double>(2, 1),
+                rotationMatrix.Get<double>(2, 2));
+
+            rot = new Point3f(
+                        (float)(pitch * 180.0 / Math.PI),
+                        (float)(yaw * 180.0 / Math.PI),
+                        (float)(roll * 180.0 / Math.PI)
+            );
+        }
+
+        public static void ExtractTranslation(Mat tvec, out Point3f trans)
+        {
+            trans = new Point3f(
+                (float)tvec.Get<double>(0, 0),
+                (float)tvec.Get<double>(1, 0),
+                (float)tvec.Get<double>(2, 0)
+            );
         }
 
         public static double CalculateRotation(Point2f origin, Point2f point)
@@ -490,10 +670,144 @@ namespace Headtracker_Console
             return angleDegrees;
         }
 
-        public static Point2f EstimateOrigin(Point2f centerVector, Point2f curVector)
+        /// <summary>
+        /// Given the object points, rotation vector, and translation vector, transform the original object points to the current points.
+        /// </summary>
+        /// <param name="objectPoints"></param>
+        /// <param name="rvec"></param>
+        /// <param name="tvec"></param>
+        /// <returns></returns>
+        public static List<Point3f> TransformPoint(Point3f[] objectPoints, Mat rvec, Mat tvec)
         {
-            return new Point2f();
+            List<Point3f> tPoints = new List<Point3f>();
+
+            foreach (Point3f original in objectPoints)
+            {
+                // Convert the rotation vector to a rotation matrix
+                Mat rmat = new Mat();
+                Cv2.Rodrigues(rvec, rmat);
+
+                // Convert Point3f to a Mat for matrix multiplication
+                Mat pointMat = new Mat(3, 1, MatType.CV_64F); // Create an uninitialized Mat
+                pointMat.Set<double>(0, 0, original.X); // Set the value at (0, 0) to original.X
+                pointMat.Set<double>(1, 0, original.Y); // Set the value at (1, 0) to original.Y
+                pointMat.Set<double>(2, 0, original.Z); // Set the value at (2, 0) to original.Z
+
+                // Apply rotation: R * P
+                Mat rotatedPoint = rmat * pointMat;
+
+                string pdump = pointMat.Dump();
+                string rmDump = rmat.Dump();
+                string rdump = rotatedPoint.Dump();
+                string tdump = tvec.Dump();
+
+                // Apply translation: R * P + T
+                Point3f transformedPoint = new Point3f(
+                    (float)(rotatedPoint.At<double>(0, 0) + tvec.At<double>(0, 0)),
+                    (float)(rotatedPoint.At<double>(1, 0) + tvec.At<double>(1, 0)),
+                    (float)(rotatedPoint.At<double>(2, 0) + tvec.At<double>(2, 0))
+                );
+
+                tPoints.Add(transformedPoint);
+            }
+
+            return tPoints;
         }
+
+        public static void EstimateRigidTransform(List<Point3f> original, List<Point3f> transformed, out Mat rvec, out Mat tvec)
+        {
+            if (original.Count != transformed.Count || original.Count < 3)
+                throw new ArgumentException("At least 3 corresponding points are required.");
+
+            // Convert lists to Mats
+            Mat originalMat = new Mat(original.Count, 3, MatType.CV_64F);
+            Mat transformedMat = new Mat(transformed.Count, 3, MatType.CV_64F);
+
+            for (int i = 0; i < original.Count; i++)
+            {
+                originalMat.Set<double>(i, 0, original[i].X);
+                originalMat.Set<double>(i, 1, original[i].Y);
+                originalMat.Set<double>(i, 2, original[i].Z);
+
+                transformedMat.Set<double>(i, 0, transformed[i].X);
+                transformedMat.Set<double>(i, 1, transformed[i].Y);
+                transformedMat.Set<double>(i, 2, transformed[i].Z);
+            }
+
+            string odUMP = originalMat.Dump();
+            string tDump = transformedMat.Dump();
+
+            // Calculate centroids
+            Point3f centroidOriginal = new Point3f(
+                (float)originalMat.Col(0).Mean().Val0,
+                (float)originalMat.Col(1).Mean().Val0,
+                (float)originalMat.Col(2).Mean().Val0
+            );
+
+            Point3f centroidTransformed = new Point3f(
+                (float)transformedMat.Col(0).Mean().Val0,
+                (float)transformedMat.Col(1).Mean().Val0,
+                (float)transformedMat.Col(2).Mean().Val0
+            );
+
+            // Center the points around their centroid
+            for (int i = 0; i < original.Count; i++)
+            {
+                original[i] -= centroidOriginal;
+                transformed[i] -= centroidTransformed;
+            }
+
+            // Convert centered points to Mats
+            Mat centeredOriginal = new Mat(original.Count, 3, MatType.CV_64F);
+            Mat centeredTransformed = new Mat(transformed.Count, 3, MatType.CV_64F);
+
+            for (int i = 0; i < original.Count; i++)
+            {
+                centeredOriginal.Set<double>(i, 0, original[i].X);
+                centeredOriginal.Set<double>(i, 1, original[i].Y);
+                centeredOriginal.Set<double>(i, 2, original[i].Z);
+
+                centeredTransformed.Set<double>(i, 0, transformed[i].X);
+                centeredTransformed.Set<double>(i, 1, transformed[i].Y);
+                centeredTransformed.Set<double>(i, 2, transformed[i].Z);
+            }
+
+            // Compute cross-covariance matrix
+            Mat H = centeredOriginal.T() * centeredTransformed;
+
+            // Perform SVD on H
+            Mat w = new Mat(), u = new Mat(), vt = new Mat();
+            Cv2.SVDecomp(H, w, u, vt);
+
+            // Compute rotation matrix: R = V * U^T
+            Mat R = vt.T() * u.T();
+
+            // Ensure proper orientation (det(R) = 1 for a valid rotation matrix)
+            if (Cv2.Determinant(R) < 0)
+            {
+                Mat vtRow2 = vt.Row(2);
+                vtRow2 *= -1;
+                R = vt.T() * u.T();
+            }
+
+            // Convert rotation matrix to rotation vector
+            rvec = new Mat();
+            Cv2.Rodrigues(R, rvec);
+
+            // Compute translation: T = centroidTransformed - R * centroidOriginal
+            Mat centroidOriginalMat = new Mat(3, 1, MatType.CV_64F);
+            centroidOriginalMat.Set<double>(0, 0, centroidOriginal.X);
+            centroidOriginalMat.Set<double>(1, 0, centroidOriginal.Y);
+            centroidOriginalMat.Set<double>(2, 0, centroidOriginal.Z);
+
+            Mat rotatedCentroid = R * centroidOriginalMat;
+            tvec = new Mat(3, 1, MatType.CV_64F);
+
+            tvec.Set<double>(0, 0, centroidTransformed.X - rotatedCentroid.At<double>(0, 0));
+            tvec.Set<double>(1, 0, centroidTransformed.Y - rotatedCentroid.At<double>(1, 0));
+            tvec.Set<double>(2, 0, centroidTransformed.Z - rotatedCentroid.At<double>(2, 0));
+        }
+
 
         public static Point2f AdjustMagnitude(Point2f cur, float desiredLength)
         {
@@ -521,6 +835,8 @@ namespace Headtracker_Console
         {
             centerPoints = points;
             ResetPrediction();
+            frameAfterCenter = 0;
+
         }
 
         static float z = 50;
