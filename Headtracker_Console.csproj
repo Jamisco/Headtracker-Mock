@@ -43,17 +43,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Calibrator.cs" />
     <Compile Include="CameraProperties.cs" />
     <Compile Include="ExtensionMethods.cs" />
     <Compile Include="KalmanFilter3D.cs" />
-    <Compile Include="Polygon.cs" />
     <Compile Include="PoseTransformation.cs" />
-    <Compile Include="PoseTransformation2.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="HeadTracker.cs" />
-    <Compile Include="Triangle.cs" />
     <Compile Include="TShape.cs" />
   </ItemGroup>
   <ItemGroup>

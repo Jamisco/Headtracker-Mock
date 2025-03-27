@@ -1,16 +1,10 @@
-﻿using Headtracker_Console;
-using OpenCvSharp;
-using ScottPlot.Colormaps;
-using ScottPlot.PlotStyles;
+﻿using OpenCvSharp;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Windows.Forms;
-using static Headtracker_Console.Calibrator;
 
 namespace Headtracker_Console
 {
@@ -45,10 +39,6 @@ namespace Headtracker_Console
         public Point2f printNewLine = new Point2f(0, 20);
         int printLine = 1;
 
-        public enum ShapeType { Triangle, Polygon, TShape };
-
-        public const ShapeType Shape2Use = ShapeType.TShape;
-
         private bool isTracking;
 
         public enum Transformations { Scale, Yaw, Roll, Pitch, X, Y, Z };
@@ -78,18 +68,9 @@ namespace Headtracker_Console
             rotSmoother = new SmoothingFilter(smoothValue);
             traSmoother = new SmoothingFilter(smoothValue);
         }
-
-        // Detect contours or blobs (these would correspond to your LEDs/markers)
-        public Triangle curTriangle { get; private set; }
-        public Polygon curPolygon { get; private set; }
         public TShape curTShape { get; private set; }
-
-        public Triangle centerTriangle { get; private set; }
-        public Polygon centerPolygon { get; private set; }
         public TShape centerTShape { get; private set; }
         public bool HasCenter { get; set; } = false;
-
-        public Calibrator calibrator = new Calibrator();
 
         public void StartTracking()
         {
@@ -101,31 +82,11 @@ namespace Headtracker_Console
             trackingThread = new Thread(TrackingLoop);
             keyPressThread = new Thread(ReadKey);
 
-            switch (Shape2Use)
-            {
-                case ShapeType.Triangle:
-                    Console.WriteLine("Using Triangle Tracking");
-
-                    break;
-                case ShapeType.Polygon:
-                    Console.WriteLine("Using Polygon Tracking");
-
-                    break;
-                case ShapeType.TShape:
-                    Console.WriteLine("Using TShape Tracking");
-                    break;
-                default:
-                    break;
-            }
-
             trackingThread.Start();
             keyPressThread.Start();
         }
 
         public int frameCount = 0;
-
-        public bool IsCalibrating { get; set; } = false;
-
         public void ReadKey()
         {
             while (true)
@@ -137,7 +98,7 @@ namespace Headtracker_Console
                     if (k.Key == ConsoleKey.Spacebar)
                     {
                         SetCenter();
-                        SetOffset();
+                        PoseTransformation.ClearOffsets();
 
                         Console.WriteLine("New Center Set");
                     }
@@ -146,74 +107,12 @@ namespace Headtracker_Console
                         Console.WriteLine("Prediction Cleared");
                         PoseTransformation.ClearOffsets();
                     }
-                    else if (k.Key == ConsoleKey.A)
-                    {
-                        IsCalibrating = !IsCalibrating;
-
-                        if(IsCalibrating)
-                        {
-                            calibrator.UpdateCenter(centerTShape, true);
-                        }
-
-                        string text = IsCalibrating ? "Started" : "Stopped";
-
-                        Console.WriteLine(text + " Calibration");
-                    }
-                    else if (k.Key == ConsoleKey.Q)
-                    {
-                        if (IsCalibrating)
-                        {
-                            calibrator.CalibrateKeyPress(RotationType.Pitch);
-
-                            string text = calibrator.CalibratingPitch ? "Started" : "Stopped";
-
-                            Console.WriteLine(text + " Pitch Calibration");
-                        }
-                    }
-                    else if (k.Key == ConsoleKey.W)
-                    {
-                        if (IsCalibrating)
-                        {
-                            calibrator.CalibrateKeyPress(RotationType.Yaw);
-
-                            string text = calibrator.CalibratingYaw ? "Started" : "Stopped";
-
-                            Console.WriteLine(text + " Yaw Calibration");
-                        }
-                    }
-                    else if (k.Key == ConsoleKey.E)
-                    {
-                        if (IsCalibrating)
-                        {
-                            calibrator.CalibrateKeyPress(RotationType.Roll);
-
-                            string text = calibrator.CalibratingRoll ? "Started" : "Stopped";
-
-                            Console.WriteLine(text + " Roll Calibration");
-                        }
-                    }
-                    else if (k.Key == ConsoleKey.S)
-                    {
-                        if (IsCalibrating)
-                        {
-                            calibrator.SaveCurrentData();
-
-                        }
-                    }
-                    else if (k.Key == ConsoleKey.D)
-                    {
-                        if (IsCalibrating)
-                        {
-                            calibrator.ClearCurrentCalibration();
-
-                        }
-                    }
+                    
                 }
             }
         }
 
         Mat displayFrame;
-        public static Mat CloneFrame;
 
         string frameName = "Tracking Frame4";
         private void TrackingLoop()
@@ -227,71 +126,48 @@ namespace Headtracker_Console
                 var ledPoints = ExtractLedPoints(frame);
 
                 displayFrame = frame.EmptyClone();
-                CloneFrame = frame.EmptyClone();
                 DrawCenterGraph();
 
-                switch (Shape2Use)
+                TShape t = new TShape(ledPoints);
+
+                if (t.IsValid)
                 {
-                    case ShapeType.Triangle:
-                        curTriangle = new Triangle(ledPoints);
-                        curTriangle.ShowCurrentTriangle(displayFrame);
+                    if(curTShape == null)
+                    {
+                        curTShape = t;
+                    }
+                    else if (curTShape != null && curTShape.IsValid)
+                    {
+                        float distance = (float) Point2f.Distance   (curTShape.Centroid, t.Centroid);
 
-                        break;
-                    case ShapeType.Polygon:
-
-                        Polygon temp = new Polygon(ledPoints);
-
-                        if (temp.IsValid)
-                        {
-                            curPolygon = temp;
-                        }
-                        curPolygon.ShowCurrentPolygon(displayFrame);
-
-                        break;
-                    case ShapeType.TShape:
-
-                        TShape t = new TShape(ledPoints);
-
-                        if (t.IsValid)
+                        if(distance < 10)
                         {
                             curTShape = t;
                         }
-
-                        curTShape.ShowCurrentShape(displayFrame, printStartPos);
-
-                        break;
-                    default:
-                        break;
-                }
-                printLine = 0;
-
-                if (IsCalibrating)
-                {
-                    if (HasCenter)
-                    {
-                        calibrator.DrawGraph(displayFrame,  centerTShape.Centroid);
-
-                        calibrator.DrawCenterData(displayFrame);
-
-                        calibrator.AddShapeState(curTShape);
+                        else
+                        {
+                            int sdsd = 2;
+                        }
 
                     }
-                    else
-                    {
-                        calibrator.DrawGraph(displayFrame,  curTShape.Centroid);
-                    }
+
+
                 }
                 else
                 {
-                    if (HasCenter)
-                    {
-                        ShowCenterTriangle(displayFrame);
-                    }
-
-                    ShowHeadPose(displayFrame);
+                    int i = 2;
                 }
-                
-InvalidPoint:
+
+                curTShape.ShowCurrentShape(displayFrame, printStartPos);
+                printLine = 0;
+
+                if (HasCenter)
+                {
+                    ShowCenterTriangle(displayFrame);
+                }
+
+                ShowHeadPose(displayFrame);
+
                 ShowFrameCounter(displayFrame);
 
                 Cv2.NamedWindow(frameName);
@@ -303,9 +179,6 @@ InvalidPoint:
                 prevFrame = frame.Clone();
             }
         }
-
-        Point2f offset = new Point2f(0, 150);
-
 
         private List<Point2f> ExtractLedPoints(Mat frame)
         {
@@ -354,6 +227,11 @@ InvalidPoint:
             {
                 double area = Cv2.ContourArea(contour);
                 contourAreas.Add(Tuple.Create(contour, area));
+            }
+
+            if(contours.Count() > 3)
+            {
+                int sddsd = 0;
             }
 
             // Step 2: Sort the contours by area (descending order)
@@ -429,31 +307,10 @@ InvalidPoint:
 
             if (HasCenter)
             {
-                switch (Shape2Use)
-                {
-                    case ShapeType.Triangle:
+                centerTShape.DrawShape(displayFrame, Scalar.White, true);
+                centerTShape.DrawCentriod(displayFrame);
 
-                        centerTriangle.DrawShape(displayFrame, Scalar.White, true);
-                        centerTriangle.DrawCentriod(displayFrame);
-
-                        break;
-                    case ShapeType.Polygon:
-
-                        centerPolygon.DrawShape(displayFrame, Scalar.White, true);
-                        centerPolygon.DrawCentriod(displayFrame);
-
-                        break;
-                    case ShapeType.TShape:
-
-                        centerTShape.DrawShape(displayFrame, Scalar.White, true);
-                        centerTShape.DrawCentriod(displayFrame);
-
-                        centerTShape.PrintData(displayFrame, printStartPos);
-
-                        break;
-                    default:
-                        break;
-                }
+                centerTShape.PrintData(displayFrame, printStartPos);
             }
         }
         private void ShowFrameCounter(Mat displayFrame)
@@ -464,26 +321,7 @@ InvalidPoint:
         }
         private void SetCenter()
         {
-            switch (Shape2Use)
-            {
-                case ShapeType.Triangle:
-
-                    centerTriangle = curTriangle;
-
-                    break;
-                case ShapeType.Polygon:
-
-                    centerPolygon = curPolygon;
-
-                    break;
-                case ShapeType.TShape:
-
-                    centerTShape = curTShape;
-
-                    break;
-                default:
-                    break;
-            }
+            centerTShape = curTShape;
 
             HasCenter = true;
             InitFilter();
@@ -512,32 +350,6 @@ InvalidPoint:
             Cv2.Line(displayFrame, topMid.R2P(), botMid.R2P(), col, s);
             Cv2.Line(displayFrame, leftMid.R2P(), rightMid.R2P(), col, s);
         }
-        private void SetOffset()
-        {
-            switch (Shape2Use)
-            {
-                case ShapeType.Triangle:
-
-                    PoseTransformation.SetCenter(curTriangle.Points);
-
-                    break;
-                case ShapeType.Polygon:
-
-                    PoseTransformation.SetCenter(curPolygon.Points);
-
-                    break;
-                case ShapeType.TShape:
-
-                    PoseTransformation.SetCenter(curTShape.Points);
-
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        int maxD = -1;
-
         private void ShowHeadPose(Mat displayFrame)
         {
             Point3d r, t;
@@ -548,84 +360,41 @@ InvalidPoint:
 
             Point2f[] points;
 
-            switch (Shape2Use)
-            {
-                case ShapeType.Triangle:
-                    points = curTriangle.Points;
-                    break;
-                case ShapeType.Polygon:
-                    points = curPolygon.Points;
-                    break;
-                case ShapeType.TShape:
-                    points = curTShape.Points;
-
-                    break;
-                default:
-                    break;
-            }
+            points = curTShape.Points;
 
             try
             {
-                //PoseTransformation.EstimateTransformation(points, out Point3d r2, out Point3d t2);
-
-                //PoseTransformation.EstimateTransformation2(displayFrame, centerTShape, curTShape, out Point3f r2, out Point3f t2);
-
-                // save unit vectors so we dont have to keep calibrating.
-                // consider finding that rotation origin instead of using unit vectors.
-
-                if (!calibrator.HasCalibration)
-                {
-                    return;
-                }
-
-                // some values dont really cross the center of the frame, thus the postive and negative values are not really accurate or sometimes no existent. New methods must be devised to store states
-
-                //calibrator.GetUnitVector(RotationType.Pitch, out UnitVector puv);
-                //calibrator.GetUnitVector(RotationType.Yaw, out UnitVector yuv);
-                //calibrator.GetUnitVector(RotationType.Roll, out UnitVector ruv);
-
-
-                calibrator.GetOrigin(RotationType.Roll, out Point2f origin);
-
-                //PoseTransformation.EstimateTransformation3(displayFrame, centerTShape, curTShape, puv, yuv, ruv, out Point3f r2, out Point3f t2);
 
                 PoseTransformation.EstimateTransformation5(displayFrame, curTShape,  out Point3f r2, out Point3f t2);
 
-                //Cv2.PutText(displayFrame, "Rotation: " + r.R2P(), 
-                //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
-
-                //Cv2.PutText(displayFrame, "Translation: " + t.R2P(), 
-                //    start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
-
                 c += 2;
 
-                deadzone = .5f;
-                r2 = EngageDeadzone(prevR, r2);
-                //t2 = EngageDeadzone(prevT, t2);
-                float sv = .4f;
+
+                float sv = .8f;
 
 
-                // the problem is the random up and down jitter
-                // you cant smooth these out using filter because they look like genuine movement.
-                // even as the head moves, this jitter is there, albeit less noticeable.
-                rotSmoother.ChangeAlpha(sv);
-                traSmoother.ChangeAlpha(sv);
+                // the problem now is that rapid changes in movement completely screw up the tracking.
+                // I believe this is due to the fact that the prediction values get confused because they rely on the previous frame's values.
+                // this usually happens if the current value for some weird reason glitch out or again if we move too eradictly,
+                // solutions
+                // 1) make sure current shape and current transformation are accurate, do so my running 2 seperate values one empty guess
+                // 2) set max limit for a particular rotation,
+                     // if width or height is only x ratio, then it shouldnt be more than r degrees etc...
+                // 3) find some other means to constantly guess user's location
+                
 
-                r2 = rotSmoother.Smooth(r2);
-                r2 = rotateKFilter.Update(r2);
 
-                t2 = traSmoother.Smooth(t2);
-                t2 = transKFilter.Update(t2);
+                // the jitter problem still persists., However, we should solve the above problem before solving this one. Else, implementing a smoothing or filtering algorithm will simple exasperate the above problem
 
+                // THIS IS PRIORIRTY
+                // modify the contours such that you only take countours that a next to last frame contours
                 Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(2),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-                prevR = r2;
-                prevT = t2;
-
+                t2 = new Point3f();
                 //SendData(r2, t2);
                 SendData2OpenTrack(r2, t2);
 
@@ -640,37 +409,6 @@ InvalidPoint:
                 return;
             }
         }
-
-        float deadzone = 1f;
-
-        private Point3f EngageDeadzone(Point3f prev, Point3f cur)
-        {
-            if (Math.Abs(cur.X - prev.X) < deadzone)
-            {
-                cur.X = prev.X;
-            }
-
-            if (Math.Abs(cur.Y - prev.Y) < deadzone)
-            {
-                cur.Y = prev.Y;
-            }
-
-            if (Math.Abs(cur.Z - prev.Z) < deadzone)
-            {
-                cur.Z = prev.Z;
-            }
-
-            return cur;
-        }
-
-        private Point3f prevR = new Point3f();
-        private Point3f prevT = new Point3f();
-
-        public void DrawCircleAtPoint(Point2f point2Draw, Scalar sl)
-        {
-            Cv2.Circle(displayFrame, point2Draw.R2P(), 2, sl, 5);
-        }
-
         private static UdpClient udpClient;
         private static readonly string localhost = "127.0.0.1";
         private static readonly int port = 4242;
@@ -718,7 +456,6 @@ InvalidPoint:
 
             }
         }
-
         public void StopTracking()
         {
             isTracking = false;

@@ -36,7 +36,7 @@ public class KalmanFilter3D
 
         float m = 1;
         // Process noise covariance matrix
-        Cv2.SetIdentity(kf.ProcessNoiseCov, Scalar.All(.01));
+        Cv2.SetIdentity(kf.ProcessNoiseCov, Scalar.All(.1));
 
         // Measurement noise covariance matrix
         Cv2.SetIdentity(kf.MeasurementNoiseCov, Scalar.All(.01));

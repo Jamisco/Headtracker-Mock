@@ -12,28 +12,14 @@ namespace Headtracker_Console
     public static class CameraProperties
     {
         static string matStr = "C:\\Users\\mufuh\\source\\repos\\Headtracker_Console\\mtxNdist.txt";
-        // Initial guess for rotation and translation
-        public static Mat rvecInit = Mat.Zeros(3, 1, MatType.CV_64FC1);
-        public static Mat tvecInit = Mat.Zeros(3, 1, MatType.CV_64FC1);
-
-        public static double fov = 80.0 * (Math.PI / 180.0);  // convert to radians
 
         public static Mat cameraMatrix = new Mat(3, 3, MatType.CV_64F);
         public static Mat distCoeffs = Mat.Zeros(1, 5, MatType.CV_64FC1);
 
         static CameraProperties()
         {
-            LoadCalibrationData();
+            LoadCalibrationData2();
         }
-
-        static int[] depthPoints = { 0, 0, 0, 0 };
-
-        // this is the measured size new Point3f(7.5f, 9.5f, 6f);
-        public static Point3f objectSize = new Point3f(7.5f, 7.5f, 6f);
-        public static Point2f objScreenSize = new Point2f(225, 214);
-
-        // every x pixels is 1 inch. so if the value is 10, that means every 10 pixels is one inch
-        public static float pixelToInch = 10;
 
         public static Point3f[] objectPoints = new Point3f[] 
         {
@@ -42,23 +28,46 @@ namespace Headtracker_Console
             new Point3f(4f, 0, -6f),      // Right
         };
 
-        public static float objWidth = 7.5f;
-        public static float objDepth = 4f; // technically its 4 inches, but we cant possible turn our heads that well
-
-        public static Point3f[] SetObjectPointsFromCenter(Point2f[] points)
+        public static void LoadCalibrationData2()
         {
-            // scale distances between each point to one
-            Point3f[] newPoints = new Point3f[points.Length];
+            Mat newCameraMatrix = new Mat(3, 3, MatType.CV_64F);
+            Rect roi = new Rect();
 
-            for (int i = 0; i < points.Length; i++)
+            string[] lines = File.ReadAllLines(matStr);
+
+            // Parse camera matrix (first 3 lines)
+            for (int i = 0; i < 3; i++)
             {
-                newPoints[i] = new Point3f(points[i].X - points[0].X, points[i].Y - points[0].Y, depthPoints[i]);
-
-                newPoints[i].X = newPoints[i].X * -1;
-                newPoints[i].Y = newPoints[i].Y * 1;
+                string[] values = lines[i].Trim().Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
+                for (int j = 0; j < 3; j++)
+                {
+                    cameraMatrix.Set<double>(i, j, double.Parse(values[j]));
+                }
             }
 
-            return newPoints.ToArray();
+            // Parse distortion coefficients (line 4)
+            string[] distValues = lines[3].Trim().Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < 5; i++)
+            {
+                distCoeffs.Set<double>(0, i, double.Parse(distValues[i]));
+            }
+
+            // Parse new camera matrix (lines 5-7)
+            for (int i = 0; i < 3; i++)
+            {
+                string[] values = lines[i + 4].Trim().Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
+                for (int j = 0; j < 3; j++)
+                {
+                    newCameraMatrix.Set<double>(i, j, double.Parse(values[j]));
+                }
+            }
+
+            // Parse ROI (last line)
+            string[] roiValues = lines[7].Trim().Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
+            roi.X = int.Parse(roiValues[0]);
+            roi.Y = int.Parse(roiValues[1]);
+            roi.Width = int.Parse(roiValues[2]);
+            roi.Height = int.Parse(roiValues[3]);
         }
 
         public static void LoadCalibrationData()
