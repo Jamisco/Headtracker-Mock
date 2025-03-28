@@ -104,15 +104,7 @@ namespace Headtracker_Console
         {
             get
             {
-                foreach (var point in Points)
-                {
-                    if (point.X < 0 || point.X >= FRAMEWIDTH || point.Y < 0 || point.Y >= FRAMEHEIGHT)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
+                return IsValidPoints(Points);
             }
         }
         //public readonly Mat PointsMatrix
@@ -133,25 +125,27 @@ namespace Headtracker_Console
         //    }
         //}
 
-        public static bool IsValidPoint(List<Point2f> points)
+        public static bool IsValidPoints(Point2f[] points)
         {
-            bool valid = true;
+            if(points.Length != 3)
+            {
+                return false;
+            }
 
             foreach (var point in points)
             {
                 if (point.X < 0 || point.X >= FRAMEWIDTH || point.Y < 0 || point.Y >= FRAMEHEIGHT)
                 {
-                    valid = false;
-                    break;
+                    return false;
                 }
             }
 
-            return valid;
+            return true;
         }
 
-            public TShape(List<Point2f> leds)
+        public TShape(List<Point2f> leds)
         {
-            if (leds == null ||  leds.Count < 3)
+            if (leds == null || leds.Count < 3)
             {
                 Points = new Point2f[0];
                 return;
@@ -247,7 +241,7 @@ namespace Headtracker_Console
 
             float ts = 1.3f;
 
-            if(showLengths == false)
+            if (showLengths == false)
             {
                 return;
             }

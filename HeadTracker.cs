@@ -1,4 +1,5 @@
-﻿using OpenCvSharp;
+﻿
+using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,7 +23,7 @@ namespace Headtracker_Console
         public static Point2f FRAMECENTER = new Point2f(FRAMEWIDTH / 2, FRAMEHEIGHT / 2);
         public const int CaptureFps = 30;
         public const bool TEST = false;
-        public static bool SHOWGRAY = false;
+        public static bool SHOWGRAY = true;
 
         public Point2f printStartPos
         {
@@ -68,6 +69,8 @@ namespace Headtracker_Console
             rotSmoother = new SmoothingFilter(smoothValue);
             traSmoother = new SmoothingFilter(smoothValue);
         }
+        public TShape prevTShape { get; private set; }
+
         public TShape curTShape { get; private set; }
         public TShape centerTShape { get; private set; }
         public bool HasCenter { get; set; } = false;
@@ -134,20 +137,17 @@ namespace Headtracker_Console
                 {
                     if(curTShape == null)
                     {
+                        prevTShape = curTShape;
                         curTShape = t;
                     }
                     else if (curTShape != null && curTShape.IsValid)
                     {
-                        float distance = (float) Point2f.Distance   (curTShape.Centroid, t.Centroid);
+                        float distance = (float)Point2f.Distance(curTShape.Centroid, t.Centroid);
 
-                        if(distance < 10)
-                        {
-                            curTShape = t;
-                        }
-                        else
-                        {
-                            int sdsd = 2;
-                        }
+                        prevTShape = curTShape;
+
+                        curTShape = t;
+
 
                     }
 
@@ -197,41 +197,97 @@ namespace Headtracker_Console
                 Cv2.Threshold(grayFrame, grayFrame, 30, 150, ThresholdTypes.Binary);
 
 
-                if (SHOWGRAY)
-                {
-                    //Cv2.ImShow("OG Image", frame);
-
-                    Cv2.ImShow("Gray Frame", grayFrame);
-                }
-
                 // pass in the previous points and modify the method so that it favors points that are closer to the previous points.
                 // also make it so that points that are within the blob of said closer points are thesame as the previous points.
                 Cv2.FindContours(grayFrame, out curContours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
 
-                Point2f[] ledPoints;
-                return PointFromContours(curContours);
+                var led = PointFromContours(grayFrame, curContours);
+
+                if (SHOWGRAY)
+                {
+                    //Cv2.ImShow("OG Image", frame);
+                    Cv2.ImShow("Gray Frame", grayFrame);
+                }
+
+                return led;
             }
             catch (Exception ex)
             {
                 return null;
             }
         }
-        private List<Point2f> PointFromContours(Point[][] contours)
+        private List<Point2f> PointFromContours(Mat frame, Point[][] contours)
         {
             // Step 1: Calculate areas for all contours
             List<Tuple<Point[], double>> contourAreas = new List<Tuple<Point[], double>>();
 
             List<(Point2f, double)> pulses = new List<(Point2f, double)>();
 
+            Cv2.PutText(frame, "Countours Found: " + contours.Length, new Point(0, 100), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
             foreach (var contour in contours)
             {
-                double area = Cv2.ContourArea(contour);
-                contourAreas.Add(Tuple.Create(contour, area));
+                Moments moments = Cv2.Moments(contour);
+
+                Point2f center = contour[0];
+
+                Cv2.Circle(frame, center.R2P(), 10, Scalar.White, 2);
             }
 
             if(contours.Count() > 3)
             {
-                int sddsd = 0;
+                int sds = 2; ;
+            }
+
+            if (contours.Length > 3 && prevTShape != null)
+            {
+                List<(float, Point[])> distance = new List<(float, Point[])>();
+
+                foreach (var contour in contours)
+                {
+                    Moments moments = Cv2.Moments(contour);
+
+                    Point2f con = new Point2f((int)(moments.M10 / moments.M00), (int)(moments.M01 / moments.M00));
+
+                    float minD = float.MaxValue;
+
+                    foreach (Point2f c in prevTShape.Points)
+                    {
+                        float d = (float)con.DistanceTo(c);
+
+                        if (d < minD)
+                        {
+                            minD = d;
+                        }
+                    }
+
+                    distance.Add((minD, contour));
+                }
+
+                distance.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+
+                distance = distance.Take(3).ToList();
+
+                contours = distance.Select(d => d.Item2).ToArray();
+
+            }
+
+
+            foreach (var contour in contours)
+            {
+                Moments moments = Cv2.Moments(contour);
+
+                Point2f center = contour[0];
+
+                Cv2.Circle(frame, center.R2P(), 15, Scalar.White, 2);
+
+            }
+
+
+            foreach (var contour in contours)
+            {
+                double area = Cv2.ContourArea(contour);
+                contourAreas.Add(Tuple.Create(contour, area));
             }
 
             // Step 2: Sort the contours by area (descending order)
@@ -394,7 +450,6 @@ namespace Headtracker_Console
                 Cv2.PutText(displayFrame, "Translation2: " + t2.R2P(),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 
-                t2 = new Point3f();
                 //SendData(r2, t2);
                 SendData2OpenTrack(r2, t2);
 

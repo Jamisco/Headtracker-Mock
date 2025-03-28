@@ -23,9 +23,9 @@ namespace Headtracker_Console
 
         public static Point3f[] objectPoints = new Point3f[] 
         {
-            new Point3f(-4f, 0, -6f),    // Left
-            new Point3f(0, -10f, 0),    // Top
-            new Point3f(4f, 0, -6f),      // Right
+            new Point3f(0f, 0, -6f),    // Left
+            new Point3f(4, -10f, 0),    // Top
+            new Point3f(8f, 0, -6f),      // Right
         };
 
         public static void LoadCalibrationData2()

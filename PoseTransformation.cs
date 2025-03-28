@@ -1,5 +1,6 @@
 ﻿using OpenCvSharp;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using static Headtracker_Console.CameraProperties;
@@ -17,7 +18,8 @@ namespace Headtracker_Console
         public static Point3f tOffset = new Point3f();
         public static Point3f rOffset = new Point3f();
 
-        static int frameAfterCenter = 0;
+        static bool setOffset = false;
+        static bool initFrame = true;
 
         static PoseTransformation()
         {
@@ -72,9 +74,8 @@ namespace Headtracker_Console
 
         static float objectScaler = 10f;
         static Point3f initTranslation = new Point3f(0f, 0f, 30);
-        public static void SetPrediction(Point2f[] points)
+        public static void SetPrediction()
         {
-            Point2f centriod = GetCentriod(points);
 
             // the z number doesnt matter that much, but it must be high
 
@@ -86,6 +87,102 @@ namespace Headtracker_Console
             rvecGuess.Set<double>(1, 0, 0);
             rvecGuess.Set<double>(2, 0, 0);
         }
+
+        public static void QuickEstimate(
+                Mat frame,
+                TShape shape,   // Current 2D points
+                out Point3f r) 
+        {
+
+            List<Point2f> leds = new List<Point2f>();
+
+            foreach (var p in CameraProperties.objectPoints)
+            {
+                leds.Add(new Point2f(p.X, p.Y));
+            }
+
+            TShape center = new TShape(leds);
+
+            float cs = shape.Height + shape.Width;
+            float cc = center.Height + center.Width;
+
+            float pitch = (float)Math.Sin(Math.PI * ((shape.Height / cs) - (center.Height / cc)));
+
+            if(pitch < 0)
+            {
+                pitch = pitch * 60;
+            }
+            else
+            {
+                pitch = pitch * 180;
+            }
+
+            float yaw = shape.Centroid.X - shape.TopCentroid.X - center.Centroid.X + center.TopCentroid.X;
+
+            r = new Point3f();
+
+            Cv2.PutText(frame, "Pitch: " + pitch,
+                        new Point(300, 420), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+            r = new Point3f(pitch, 0, 0);
+
+
+        }
+
+        public static void AutoAdjustCenter(Mat frame, TShape shape, TShape center = null)
+        {
+            Point2f screenCenter = new Point2f(frame.Width / 2, frame.Height / 2);
+            string rr = "Ressetting ";
+            float cr = 20;
+
+            float distance = (float)Math.Abs(shape.Centroid.X - screenCenter.X);
+
+            float x = (float)tvecGuess.Get<double>(0, 0);
+            x = Math.Abs(x) * objectScaler;
+
+            if (distance < cr && x > 1)
+            {
+                tvecGuess.Set<double>(0, 0, 0);
+                rvecGuess.Set<double>(1, 0, 0);
+                rr += " X";
+            }
+
+            distance = (float)Math.Abs(shape.Centroid.Y - screenCenter.Y);
+            float y = (float)tvecGuess.Get<double>(1, 0);
+            y = Math.Abs(y) * objectScaler;
+
+
+            if (distance < cr && y > 1)
+            {
+                tvecGuess.Set<double>(1, 0, 0);
+                rvecGuess.Set<double>(0, 0, 0);
+
+                rr += " Y";
+            }
+
+            if(center != null)
+            {
+                float cd = (float)Point2f.Distance(shape.Centroid, center.Centroid);
+
+                float cp = shape.Height + shape.Width;
+                float cc = center.Height + center.Width;
+
+                float pp = (cp / cc) * 100;
+
+                if (cd < cr && pp < 10)
+                {
+                    tvecGuess.Set<double>(2, 0, initTranslation.Z);
+                    rr += " Z";
+                }
+
+                Cv2.Circle(frame, center.Centroid.R2P(), 20, Scalar.Green, 2);
+
+            }
+
+            Cv2.PutText(frame, rr, new Point(300, 460), HersheyFonts.HersheyPlain, 1, Scalar.White);
+        }
+
+        public static TShape centerShape = null;
         public static void EstimateTransformation5(
                 Mat frame,
                 TShape shape,   // Current 2D points
@@ -106,10 +203,10 @@ namespace Headtracker_Console
                 objPoints[i] = p.Multiply(1 / objectScaler);
             }
 
-            // predict only the first frame
-            if (frameAfterCenter == 0)
+            if(initFrame)
             {
-                SetPrediction(curPoints);
+                SetPrediction();
+                initFrame = false;
             }
 
             string rd = rvecGuess.Dump();
@@ -117,6 +214,9 @@ namespace Headtracker_Console
             string cam = cameraMatrix.Dump();
             string ddd = distCoeffs.Dump();
 
+            AutoAdjustCenter(frame, shape, centerShape);
+
+        SolvePnP:
             // Convert arrays to InputArray
             using (InputArray objectPointsInput = InputArray.Create(objPoints))
             using (InputArray imagePointsInput = InputArray.Create(curPoints))
@@ -148,7 +248,10 @@ namespace Headtracker_Console
                 //ProjectPoints(rvec, tvec);
 
                 ExtractAngles(rvec, out r);
+                QuickEstimate(frame, shape, out Point3f rt);
+
                 ExtractTranslation(tvec, out t);
+
 
                 Point2f start = new Point2f(300, 380);
                 Point2f line = new Point2f(0, 20);
@@ -163,23 +266,26 @@ namespace Headtracker_Console
 
                 // Translation
                 t = new Point3f(
-                    t.X * objectScaler,
-                    t.Y * objectScaler,
+                    -t.X * objectScaler,
+                    -t.Y * objectScaler,
                     t.Z * (objectScaler / initTranslation.Z)
                 );
 
+                t = t.Multiply(10);
+
                 //t = t.Multiply(objectScaler);
 
-                if (frameAfterCenter == 0)
+                if (setOffset == true)
                 {
                     rOffset = r;
                     tOffset = t;
+                    centerShape = shape;
+                    setOffset = false;
                 }
 
                 r = r - rOffset;
                 t = t - tOffset;
 
-                frameAfterCenter++;
             }
         }
 
@@ -203,7 +309,7 @@ namespace Headtracker_Console
             rot = new Point3f(
                         (float)(pitch * 180.0 / Math.PI),
                         -(float)(yaw * 180.0 / Math.PI),
-                        (float)(roll * 180.0 / Math.PI)
+                        -(float)(roll * 180.0 / Math.PI)
             );
         }
         public static void ExtractTranslation(Mat tvec, out Point3f trans)
@@ -217,7 +323,10 @@ namespace Headtracker_Console
         public static void ClearOffsets()
         {
             ResetPrediction();
-            frameAfterCenter = 0;
+            SetPrediction();
+
+            setOffset = true;
+
         }
     }
 }
