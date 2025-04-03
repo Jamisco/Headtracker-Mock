@@ -45,12 +45,6 @@ namespace Headtracker_Console
         public enum Transformations { Scale, Yaw, Roll, Pitch, X, Y, Z };
         public enum Axis { X, Y };
 
-        public KalmanFilter3D rotateKFilter;
-        public KalmanFilter3D transKFilter;
-
-        public SmoothingFilter rotSmoother;
-        public SmoothingFilter traSmoother;
-
         float smoothValue = .2f;
         public HeadTracker(int cameraIndex = 0)
         {
@@ -60,14 +54,6 @@ namespace Headtracker_Console
             capture.FrameHeight = FRAMEHEIGHT;
             capture.FrameWidth = FRAMEWIDTH;
             Console.WriteLine("Size: " + capture.FrameHeight + " - " + capture.FrameWidth);
-        }
-
-        private void InitFilter()
-        {
-            rotateKFilter = new KalmanFilter3D();
-            transKFilter = new KalmanFilter3D();
-            rotSmoother = new SmoothingFilter(smoothValue);
-            traSmoother = new SmoothingFilter(smoothValue);
         }
 
         public TShape prevTShape { get; private set; }
@@ -410,7 +396,6 @@ namespace Headtracker_Console
             centerTShape = curTShape;
 
             HasCenter = true;
-            InitFilter();
         }
         private void DrawCenterGraph()
         {
@@ -459,25 +444,6 @@ namespace Headtracker_Console
 
                 c += 2;
 
-
-                float sv = .8f;
-
-
-                // the problem now is that rapid changes in movement completely screw up the tracking.
-                // I believe this is due to the fact that the prediction values get confused because they rely on the previous frame's values.
-                // this usually happens if the current value for some weird reason glitch out or again if we move too eradictly,
-                // solutions
-                // 1) make sure current shape and current transformation are accurate, do so my running 2 seperate values one empty guess
-                // 2) set max limit for a particular rotation,
-                     // if width or height is only x ratio, then it shouldnt be more than r degrees etc...
-                // 3) find some other means to constantly guess user's location
-                
-
-
-                // the jitter problem still persists., However, we should solve the above problem before solving this one. Else, implementing a smoothing or filtering algorithm will simple exasperate the above problem
-
-                // THIS IS PRIORIRTY
-                // modify the contours such that you only take countours that a next to last frame contours
                 Cv2.PutText(displayFrame, "Rotation2: " + r2.R2P(2),
                     start + (step * c++), HersheyFonts.HersheyPlain, 1, Scalar.White);
 

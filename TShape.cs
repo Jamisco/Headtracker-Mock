@@ -174,37 +174,6 @@ namespace Headtracker_Console
 
             Points = new Point2f[] { left, top, right };
         }
-
-        [JsonConstructor]
-        public TShape(Point2f[] points)
-        {
-            Points = points;
-        }
-
-        public void Translate(Point2f p)
-        {
-            List<Point2f> newPoints = new List<Point2f>();
-            foreach (var point in Points)
-            {
-                newPoints.Add(point - p);
-            }
-
-            Points = newPoints.ToArray();
-        }
-        public void TranslateTo(Point2f center)
-        {
-            // move current triangle to new center
-
-            Point2f cDiff = center - Centroid;
-
-            List<Point2f> newPoints = new List<Point2f>();
-            foreach (var point in Points)
-            {
-                newPoints.Add(point + cDiff);
-            }
-
-            Points = newPoints.ToArray();
-        }
         public void DrawShape(Mat frame, Scalar sl, bool showLengths = true)
         {
             Point2f px = new Point2f(20, 0);
