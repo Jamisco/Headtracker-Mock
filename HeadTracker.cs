@@ -23,7 +23,7 @@ namespace Headtracker_Console
         public static Point2f FRAMECENTER = new Point2f(FRAMEWIDTH / 2, FRAMEHEIGHT / 2);
         public const int CaptureFps = 30;
         public const bool TEST = false;
-        public static bool SHOWGRAY = true;
+        public static bool SHOWGRAY = false;
 
         public Point2f printStartPos
         {
@@ -69,10 +69,16 @@ namespace Headtracker_Console
             rotSmoother = new SmoothingFilter(smoothValue);
             traSmoother = new SmoothingFilter(smoothValue);
         }
-        public TShape prevTShape { get; private set; }
 
+        public TShape prevTShape { get; private set; }
         public TShape curTShape { get; private set; }
         public TShape centerTShape { get; private set; }
+
+        public Trapezoid prevTrap { get; private set; }
+        public Trapezoid curTrap { get; private set; }
+        public TShape centerTrap { get; private set; }
+
+
         public bool HasCenter { get; set; } = false;
 
         public void StartTracking()
@@ -132,33 +138,49 @@ namespace Headtracker_Console
                 DrawCenterGraph();
 
                 TShape t = new TShape(ledPoints);
+                Trapezoid trap = new Trapezoid(ledPoints);
 
-                if (t.IsValid)
+                if (trap.IsValid)
                 {
-                    if(curTShape == null)
+                    if (curTrap == null)
                     {
-                        prevTShape = curTShape;
-                        curTShape = t;
+                        prevTrap = curTrap;
+                        curTrap = trap;
                     }
-                    else if (curTShape != null && curTShape.IsValid)
+                    else if (curTrap != null && curTrap.IsValid)
                     {
-                        float distance = (float)Point2f.Distance(curTShape.Centroid, t.Centroid);
+                        float distance = (float)Point2f.Distance(curTrap.Centroid, trap.Centroid);
 
-                        prevTShape = curTShape;
-
-                        curTShape = t;
-
-
+                        prevTrap = curTrap;
+                        curTrap = trap;
                     }
 
 
                 }
-                else
-                {
-                    int i = 2;
-                }
 
-                curTShape.ShowCurrentShape(displayFrame, printStartPos);
+                //if (t.IsValid)
+                //{
+                //    if(curTShape == null)
+                //    {
+                //        prevTShape = curTShape;
+                //        curTShape = t;
+
+                //    }
+                //    else if (curTShape != null && curTShape.IsValid)
+                //    {
+                //        float distance = (float)Point2f.Distance(curTShape.Centroid, t.Centroid);
+
+                //        prevTShape = curTShape;
+
+                //        curTShape = t;
+
+                //        prevTrap = curTrap;
+                //        curTrap = trap;
+                //    }
+                //}
+
+                //curTShape.ShowCurrentShape(displayFrame, printStartPos);
+                curTrap.ShowCurrentShape(displayFrame, printStartPos);
                 printLine = 0;
 
                 if (HasCenter)
@@ -194,7 +216,7 @@ namespace Headtracker_Console
                 // apply gausasain filter
                 //Cv2.GaussianBlur(grayFrame, grayFrame, new Size(5, 5), 0);
 
-                Cv2.Threshold(grayFrame, grayFrame, 30, 150, ThresholdTypes.Binary);
+                Cv2.Threshold(grayFrame, grayFrame, 50, 255, ThresholdTypes.Binary);
 
 
                 // pass in the previous points and modify the method so that it favors points that are closer to the previous points.
@@ -205,7 +227,7 @@ namespace Headtracker_Console
 
                 if (SHOWGRAY)
                 {
-                    //Cv2.ImShow("OG Image", frame);
+                    Cv2.ImShow("OG Image", frame);
                     Cv2.ImShow("Gray Frame", grayFrame);
                 }
 
@@ -266,22 +288,22 @@ namespace Headtracker_Console
 
                 distance.Sort((a, b) => a.Item1.CompareTo(b.Item1));
 
-                distance = distance.Take(3).ToList();
+                distance = distance.Take(4).ToList();
 
                 contours = distance.Select(d => d.Item2).ToArray();
 
             }
 
 
-            foreach (var contour in contours)
-            {
-                Moments moments = Cv2.Moments(contour);
+            //foreach (var contour in contours)
+            //{
+            //    Moments moments = Cv2.Moments(contour);
 
-                Point2f center = contour[0];
+            //    Point2f center = contour[0];
 
-                Cv2.Circle(frame, center.R2P(), 15, Scalar.White, 2);
+            //    Cv2.Circle(frame, center.R2P(), 15, Scalar.White, 2);
 
-            }
+            //}
 
 
             foreach (var contour in contours)
@@ -361,12 +383,20 @@ namespace Headtracker_Console
         {
             Mat f = frame.EmptyClone();
 
+            //if (HasCenter)
+            //{
+            //    centerTShape.DrawShape(displayFrame, Scalar.White, true);
+            //    centerTShape.DrawCentriod(displayFrame);
+
+            //    centerTShape.PrintData(displayFrame, printStartPos);
+            //}
+
             if (HasCenter)
             {
-                centerTShape.DrawShape(displayFrame, Scalar.White, true);
-                centerTShape.DrawCentriod(displayFrame);
+                curTrap.DrawShape(displayFrame, Scalar.White, true);
+                curTrap.DrawCentriod(displayFrame);
 
-                centerTShape.PrintData(displayFrame, printStartPos);
+                curTrap.PrintData(displayFrame, printStartPos);
             }
         }
         private void ShowFrameCounter(Mat displayFrame)
@@ -416,12 +446,16 @@ namespace Headtracker_Console
 
             Point2f[] points;
 
-            points = curTShape.Points;
+            //points = curTShape.Points;
+            points = curTrap.Points;
+
 
             try
             {
 
-                PoseTransformation.EstimateTransformation5(displayFrame, curTShape,  out Point3f r2, out Point3f t2);
+                //PoseTransformation.EstimateTransformation5(displayFrame, curTShape,  out Point3f r2, out Point3f t2);
+
+                PoseTransformation.EstimateTransformation6(displayFrame, curTrap, out Point3f r2, out Point3f t2);
 
                 c += 2;
 

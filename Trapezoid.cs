@@ -10,7 +10,7 @@ using static Headtracker_Console.HeadTracker;
 namespace Headtracker_Console
 {
     [Serializable]
-    public class TShape
+    public class Trapezoid
     {
         public Point2f[] Points;
         public Point2f Centroid
@@ -32,54 +32,18 @@ namespace Headtracker_Console
         }
         // check if the points are within frame height and width
 
-        public Point2f TopBaseIntercept
-        {
-            get
-            {
-                return GetPerpendicularPoint(Points[1], Points[0], Points[2]);
-            }
-        }
-        public Point2f HeightCenterIntercept
-        {
-            get
-            {
-                return GetPerpendicularPoint(Centroid, Points[1], TopBaseIntercept);
-            }
-        }
-
         public Point2f BaseCentroid
         {
             get
             {
-                return MidPoint2f(Points[0], Points[2]);
+                return MidPoint2f(Points[0], Points[3]);
             }
         }
         public Point2f TopCentroid
         {
             get
             {
-                return MidPoint2f(Points[1], TopBaseIntercept);
-            }
-        }
-        public Point2f HeightVector
-        {
-            get
-            {
-                return TopBaseIntercept - Points[1];
-            }
-        }
-        public Point2f BaseVector
-        {
-            get
-            {
-                return Points[2] - Points[0];
-            }
-        }
-        public Point2f CenterVector
-        {
-            get
-            {
-                return Centroid - TopCentroid;
+                return MidPoint2f(Points[1], Points[2]);
             }
         }
 
@@ -88,7 +52,7 @@ namespace Headtracker_Console
         {
             get
             {
-                return (float)Point2f.Distance(Points[1], TopBaseIntercept);
+                return (float)Point2f.Distance(TopCentroid, BaseCentroid);
             }
         }
 
@@ -96,7 +60,7 @@ namespace Headtracker_Console
         {
             get
             {
-                return (float)Point2f.Distance(Points[0], Points[2]);
+                return (float)Point2f.Distance(Points[0], Points[3]);
             }
         }
 
@@ -127,7 +91,7 @@ namespace Headtracker_Console
 
         public static bool IsValidPoints(Point2f[] points)
         {
-            if(points.Length != 4)
+            if (points.Length != 4)
             {
                 return false;
             }
@@ -143,67 +107,35 @@ namespace Headtracker_Console
             return true;
         }
 
-        public TShape(List<Point2f> leds)
+        public Trapezoid(List<Point2f> leds)
         {
-            if (leds == null || leds.Count < 3)
+            if (leds == null || leds.Count < 4)
             {
                 Points = new Point2f[0];
                 return;
             }
 
-            List<Point2f> points = new List<Point2f>(leds);
+            // Sort points from left to right
+            leds.Sort((a, b) => a.X.CompareTo(b.X));
 
-            // sort points from most left to most right
+            // Identify the top and bottom points for the left and right sides
+            Point2f[] leftPoints = leds.Take(2).OrderBy(p => p.Y).ToArray();
+            Point2f[] rightPoints = leds.Skip(2).Take(2).OrderBy(p => p.Y).ToArray();
 
-            points.Sort((a, b) => a.Y.CompareTo(b.Y));
-
-            Point2f top = points[0];
-
-            Point2f left, right;
-
-            if (points[1].X > points[2].X)
+            // Assign points in the correct order: bottom-left, top-left, top-right, bottom-right
+            Points = new Point2f[]
             {
-                right = points[1];
-                left = points[2];
-            }
-            else
-            {
-                right = points[2];
-                left = points[1];
-            }
-
-            Points = new Point2f[] { left, top, right };
+                leftPoints[0], // bottom-left
+                leftPoints[1], // top-left
+                rightPoints[1], // top-right
+                rightPoints[0]  // bottom-right
+            };
         }
 
         [JsonConstructor]
-        public TShape(Point2f[] points)
+        public Trapezoid(Point2f[] points)
         {
             Points = points;
-        }
-
-        public void Translate(Point2f p)
-        {
-            List<Point2f> newPoints = new List<Point2f>();
-            foreach (var point in Points)
-            {
-                newPoints.Add(point - p);
-            }
-
-            Points = newPoints.ToArray();
-        }
-        public void TranslateTo(Point2f center)
-        {
-            // move current triangle to new center
-
-            Point2f cDiff = center - Centroid;
-
-            List<Point2f> newPoints = new List<Point2f>();
-            foreach (var point in Points)
-            {
-                newPoints.Add(point + cDiff);
-            }
-
-            Points = newPoints.ToArray();
         }
         public void DrawShape(Mat frame, Scalar sl, bool showLengths = true)
         {
@@ -222,22 +154,20 @@ namespace Headtracker_Console
 
             // Draw lines in inverse T shape and shows their distances
 
+            int ls = 2;
+
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+
+                Cv2.Line(frame, Points[i].R2P(), Points[j].R2P(), sl, ls);
+            }
+
             Point2f mid = MidPoint2f(Points[0], Points[2]);
             Point2f mid2 = new Point2f(Points[1].X, mid.Y);
 
-            int ls = 2;
-
-            Cv2.Line(frame, Points[0].R2P(), Points[2].R2P(), sl, ls);
-            Cv2.Line(frame, Points[1].R2P(), TopBaseIntercept.R2P(), sl, ls);
-            Cv2.Line(frame, Centroid.R2P(), HeightCenterIntercept.R2P(), sl, ls);
-
-
-            string height = Point2f.Distance(Points[1], TopBaseIntercept).ToString("0.00");
-            string width = Point2f.Distance(Points[0], Points[2]).ToString("0.00");
-
-            string cWdith = Point2f.Distance(Centroid, HeightCenterIntercept).ToString("0.00");
-
-            string cHeight = (Centroid.Y - TopCentroid.Y).ToString("0.00");
+            string height = Height.ToString("0.00");
+            string width = Width.ToString("0.00");
 
             float ts = 1.3f;
 
@@ -249,24 +179,6 @@ namespace Headtracker_Console
             Cv2.PutText(frame, width, (mid + py).R2P(), HersheyFonts.HersheyPlain, ts, sl);
 
             Cv2.PutText(frame, height, (Points[1] + px).R2P(), HersheyFonts.HersheyPlain, ts, sl);
-
-            Cv2.PutText(frame, cWdith, (Centroid + px).R2P(), HersheyFonts.HersheyPlain, ts, sl);
-
-            Cv2.PutText(frame, cHeight, (Centroid - xp).R2P(), HersheyFonts.HersheyPlain, ts, sl);
-
-
-            // show hypotenuses
-            //string ltDistance = Point2f.Distance(Points[0], Points[1]).ToString("0.00");
-            //string rtDistance = Point2f.Distance(Points[1], Points[2]).ToString("0.00");
-
-            //Cv2.Line(frame, Points[0].R2P(), Points[1].R2P(), sl, ls);
-            //Cv2.Line(frame, Points[1].R2P(), Points[2].R2P(), sl, ls);
-
-            //Point2f midp = MidPoint2f(Points[0], Points[1]);
-            //Cv2.PutText(frame, ltDistance, (midp - xp2 * 4).R2P(), HersheyFonts.HersheyPlain, ts, sl);
-
-            //Cv2.PutText(frame, rtDistance, (MidPoint2f(Points[1], Points[2]) + xp2).R2P(), HersheyFonts.HersheyPlain, ts, sl);
-
         }
         public void DrawCentriod(Mat frame)
         {
@@ -281,11 +193,8 @@ namespace Headtracker_Console
             Point2f py = new Point2f(0, 20);
             int c = 1;
             Scalar sl = Scalar.White;
-            Cv2.PutText(frame, "Base Vector: " + BaseVector.R2P().ToString2(), pos.R2P(), HersheyFonts.HersheyPlain, 1, sl);
 
-            Cv2.PutText(frame, "Height Vector: " + HeightVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
-
-            Cv2.PutText(frame, "Center Vector: " + CenterVector.R2P().ToString2(), (pos + py.Multiply(c++)).R2P(), HersheyFonts.HersheyPlain, 1, sl);
+            Cv2.PutText(frame, "Centroid: " + Centroid.R2P().ToString2(), pos.R2P(), HersheyFonts.HersheyPlain, 1, sl);
         }
         public void ShowCurrentShape(Mat displayFrame, Point2f printPos)
         {
@@ -295,7 +204,6 @@ namespace Headtracker_Console
                 DrawCentriod(displayFrame);
 
                 PrintData(displayFrame, printPos);
-
             }
             catch (Exception)
             {

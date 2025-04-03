@@ -182,7 +182,62 @@ namespace Headtracker_Console
             Cv2.PutText(frame, rr, new Point(300, 460), HersheyFonts.HersheyPlain, 1, Scalar.White);
         }
 
+        public static void AutoAdjustCenterT(Mat frame, Trapezoid shape, Trapezoid center = null)
+        {
+            Point2f screenCenter = new Point2f(frame.Width / 2, frame.Height / 2);
+            string rr = "Ressetting ";
+            int cr = 10;
+
+            float distance = (float)Math.Abs(shape.Centroid.X - screenCenter.X);
+
+            float x = (float)tvecGuess.Get<double>(0, 0);
+            x = Math.Abs(x) * objectScaler;
+
+            if (distance < cr && x > 1)
+            {
+                tvecGuess.Set<double>(0, 0, 0);
+                rvecGuess.Set<double>(1, 0, 0);
+                rr += " X";
+            }
+
+            distance = (float)Math.Abs(shape.Centroid.Y - screenCenter.Y);
+            float y = (float)tvecGuess.Get<double>(1, 0);
+            y = Math.Abs(y) * objectScaler;
+
+
+            if (distance < cr && y > 1)
+            {
+                tvecGuess.Set<double>(1, 0, 0);
+                rvecGuess.Set<double>(0, 0, 0);
+
+                rr += " Y";
+            }
+
+            if (center != null)
+            {
+                float cd = (float)Point2f.Distance(shape.Centroid, center.Centroid);
+
+                float cp = shape.Height + shape.Width;
+                float cc = center.Height + center.Width;
+
+                float pp = (cp / cc) * 100;
+
+                if (cd < cr && pp > 90)
+                {
+                    tvecGuess.Set<double>(2, 0, initTranslation.Z);
+                    rr += " Z";
+                }
+
+                Cv2.Circle(frame, center.Centroid.R2P(), cr, Scalar.Green, 2);
+
+            }
+
+            Cv2.PutText(frame, rr, new Point(300, 460), HersheyFonts.HersheyPlain, 1, Scalar.White);
+        }
+
         public static TShape centerShape = null;
+        public static Trapezoid tCenterShape = null;
+
         public static void EstimateTransformation5(
                 Mat frame,
                 TShape shape,   // Current 2D points
@@ -289,6 +344,114 @@ namespace Headtracker_Console
             }
         }
 
+        public static void EstimateTransformation6(
+               Mat frame,
+               Trapezoid shape,   // Current 2D points
+               out Point3f r,               // Rotation angles
+               out Point3f t)               // Translation vector
+        {
+            //ResetPrediction();
+            Point3f[] objPoints = CameraProperties.objectPoints2.ToArray();
+            //Point3f[] objPoints = CameraProperties.SetObjectPointsFromCenter(curPoints);
+
+            Point2f[] curPoints = shape.Points;
+
+            // used to scale the object values if need me
+            for (int i = 0; i < objPoints.Length; i++)
+            {
+                Point3f p = objPoints[i];
+
+                objPoints[i] = p.Multiply(1 / objectScaler);
+            }
+
+            if (initFrame)
+            {
+                SetPrediction();
+                initFrame = false;
+            }
+
+            string rd = rvecGuess.Dump();
+            string td = tvecGuess.Dump();
+            string cam = cameraMatrix.Dump();
+            string ddd = distCoeffs.Dump();
+
+            AutoAdjustCenterT(frame, shape, tCenterShape);
+
+        SolvePnP:
+            // Convert arrays to InputArray
+            using (InputArray objectPointsInput = InputArray.Create(objPoints))
+            using (InputArray imagePointsInput = InputArray.Create(curPoints))
+            using (InputArray cameraMatrixInput = InputArray.Create(cameraMatrix))
+            using (InputArray distCoeffsInput = InputArray.Create(distCoeffs))
+            using (OutputArray rvecOutput = OutputArray.Create(rvecGuess))
+            using (OutputArray tvecOutput = OutputArray.Create(tvecGuess))
+            {
+                // Solve for current pose with initial guess
+                Cv2.SolvePnP(
+                    objectPointsInput,
+                    imagePointsInput,
+                    cameraMatrixInput,
+                    distCoeffsInput,
+                    rvecOutput,
+                    tvecOutput,
+                    useExtrinsicGuess: true,  // useExtrinsicGuess = true
+                    flags: SolvePnPFlags.Iterative
+                );
+
+
+                // Get the results  
+                Mat rvec = rvecOutput.GetMat();
+                Mat tvec = tvecOutput.GetMat();
+
+                string tDump = tvec.Dump();
+                string rDump = rvec.Dump();
+
+                //ProjectPoints(rvec, tvec);
+
+                ExtractAngles(rvec, out r);
+
+                ExtractTranslation(tvec, out t);
+
+
+                Point2f start = new Point2f(300, 380);
+                Point2f line = new Point2f(0, 20);
+                int c = 0;
+
+                Cv2.PutText(frame, "Rotation: " + r.R2P(3),
+                        (start + line.Multiply(c++)).R2P(3), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+
+                Cv2.PutText(frame, "Translation: " + t.R2P(3),
+                        (start + line.Multiply(c++)).R2P(3), HersheyFonts.HersheyPlain, 1, Scalar.White);
+
+                // Translation
+                t = new Point3f(
+                    -t.X * objectScaler,
+                    -t.Y * objectScaler,
+                    t.Z * (objectScaler / initTranslation.Z)
+                );
+
+                t = t.Multiply(10);
+
+                //t = t.Multiply(objectScaler);
+
+                if (setOffset == true)
+                {
+                    rOffset = r;
+                    tOffset = t;
+                    tCenterShape = shape;
+                    setOffset = false;
+                }
+
+                r = r - rOffset;
+                t = t - tOffset;
+
+            }
+        }
+
+
+
+
         public static void ExtractAngles(Mat rvec, out Point3f rot)
         {
             Mat rotationMatrix = new Mat();
@@ -307,8 +470,8 @@ namespace Headtracker_Console
                 rotationMatrix.Get<double>(2, 2));
 
             rot = new Point3f(
-                        (float)(pitch * 180.0 / Math.PI),
-                        -(float)(yaw * 180.0 / Math.PI),
+                        -(float)(pitch * 180.0 / Math.PI),
+                        (float)(yaw * 180.0 / Math.PI),
                         -(float)(roll * 180.0 / Math.PI)
             );
         }

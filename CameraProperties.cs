@@ -28,6 +28,15 @@ namespace Headtracker_Console
             new Point3f(8f, 0, -6f),      // Right
         };
 
+        public static Point3f[] objectPoints2 = new Point3f[]
+{
+            new Point3f(0f, 0, -3f),    // Left
+            new Point3f(2f, -5, -6f),    // Left
+
+            new Point3f(6.5f, -5f, -6f),    // Top
+            new Point3f(8.5f, 0, -3f),      // Right
+};
+
         public static void LoadCalibrationData2()
         {
             Mat newCameraMatrix = new Mat(3, 3, MatType.CV_64F);
